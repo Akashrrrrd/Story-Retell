@@ -166,3 +166,87 @@ export function computeMatchScore(story: string, transcript: string) {
     contentMatches: contentMatches
   }
 }
+
+// Enhanced scoring function that uses predefined keywords from stories.json
+export function computeMatchScoreWithKeywords(story: string, transcript: string, predefinedKeywords: string[]) {
+  // Normalize predefined keywords
+  const normalizedKeywords = predefinedKeywords.map(k => k.toLowerCase().trim()).filter(Boolean)
+  const storyKeywords = new Set(normalizedKeywords)
+  const userTokens = new Set(normalize(transcript))
+
+  // Find exact matches and partial matches
+  const matched: string[] = []
+  const partialMatches: string[] = []
+  
+  for (const keyword of storyKeywords) {
+    if (userTokens.has(keyword)) {
+      matched.push(keyword)
+    } else {
+      // Check for partial matches (substring matches)
+      const hasPartialMatch = [...userTokens].some(token => 
+        token.includes(keyword) || keyword.includes(token)
+      )
+      if (hasPartialMatch) {
+        partialMatches.push(keyword)
+      }
+    }
+  }
+
+  const missing = [...storyKeywords].filter((k) => 
+    !userTokens.has(k) && !partialMatches.includes(k)
+  )
+
+  // Calculate scores
+  const exactMatchScore = storyKeywords.size ? (matched.length / storyKeywords.size) : 0
+  const partialMatchScore = storyKeywords.size ? (partialMatches.length / storyKeywords.size) * 0.5 : 0
+  
+  // Calculate meaningful word density in user response
+  const storyTokens = normalize(story)
+  const userTokensArray = normalize(transcript)
+  
+  // Count meaningful words (non-stopwords) in both story and user response
+  const storyMeaningfulWords = storyTokens.filter(token => !STOPWORDS.has(token))
+  const userMeaningfulWords = userTokensArray.filter(token => !STOPWORDS.has(token))
+  
+  // Content word overlap
+  const storyContentSet = new Set(storyMeaningfulWords)
+  const userContentSet = new Set(userMeaningfulWords)
+  
+  let contentMatches = 0
+  for (const word of storyContentSet) {
+    if (userContentSet.has(word)) {
+      contentMatches++
+    }
+  }
+  
+  const contentWordScore = storyContentSet.size ? (contentMatches / storyContentSet.size) : 0
+  
+  // Length adequacy (bonus for substantial responses)
+  const lengthRatio = Math.min(1, userMeaningfulWords.length / storyMeaningfulWords.length)
+  const lengthBonus = lengthRatio > 0.5 ? (lengthRatio - 0.5) * 0.2 : 0
+  
+  // Enhanced scoring for predefined keywords: Weight exact keyword matches more heavily
+  const baseScore = (exactMatchScore * 0.7) + (partialMatchScore * 0.2) + (contentWordScore * 0.1) + lengthBonus
+  
+  // Apply Versant-friendly curve (more generous for practice)
+  let finalScore = baseScore
+  if (baseScore > 0.4) {
+    // Boost scores above 40% more generously
+    finalScore = 0.4 + (baseScore - 0.4) * 1.3
+  } else if (baseScore > 0.2) {
+    // Moderate boost for middle range
+    finalScore = 0.2 + (baseScore - 0.2) * 1.2
+  }
+  
+  const percentage = Math.round(Math.min(100, Math.max(0, finalScore * 100)))
+
+  return {
+    percentage,
+    matchedKeywords: matched.sort(),
+    missingKeywords: missing.sort(),
+    totalKeywords: storyKeywords.size,
+    contentWords: storyContentSet.size,
+    userContentWords: userContentSet.size,
+    contentMatches: contentMatches
+  }
+}
