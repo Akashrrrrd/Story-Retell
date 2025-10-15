@@ -37,14 +37,16 @@ export default function StoryRetellApp() {
   // Estimate story duration for TTS (rough approximation)
   const estimateStoryDuration = useCallback((text: string): number => {
     const sentences = splitIntoSentences(text)
+    const chunks = splitIntoReadableChunks(text, 180)
     const wordsPerSentence = 15 // average words per sentence
     const wordsPerMinute = 150 // average speaking rate
     const speechRate = 0.8 // slower rate for better comprehension
     const secondsPerWord = (60 / wordsPerMinute) / speechRate
 
-    // Estimate: 3-5 seconds per sentence + buffer for natural pauses
+    // Estimate based on chunks (more accurate for our chunked approach)
+    // Each chunk represents a complete thought unit
     const estimatedSeconds = Math.max(
-      sentences.length * 4.5, // slightly more time per sentence with slower rate
+      chunks.length * 6, // minimum 6 seconds per chunk for comfortable listening
       text.length * secondsPerWord * 1.3 // 30% buffer for pauses and natural speech
     )
 
@@ -132,32 +134,34 @@ export default function StoryRetellApp() {
           resolve()
           return
         }
-        const sentences = splitIntoSentences(text)
+
+        // Split into readable chunks instead of individual sentences
+        const chunks = splitIntoReadableChunks(text, 180) // Slightly longer chunks for better flow
         const voices = pickVoices()
         let cancelled = false
         let idx = 0
 
         const queueNext = () => {
           if (cancelled) return
-          if (idx >= sentences.length) {
-            // Add a small delay before resolving to ensure last sentence completes
+          if (idx >= chunks.length) {
+            // Add a small delay before resolving to ensure last chunk completes
             setTimeout(() => resolve(), 500)
             return
           }
 
-          const sentence = sentences[idx].trim()
-          if (!sentence) {
+          const chunk = chunks[idx].trim()
+          if (!chunk) {
             idx++
             queueNext()
             return
           }
 
-          const u = new SpeechSynthesisUtterance(sentence)
+          const u = new SpeechSynthesisUtterance(chunk)
 
           // Use slower rate for better comprehension (0.8 instead of 1.0)
           u.rate = 0.8
 
-          // Add slight pause between sentences for better listening experience
+          // Add slight pause between chunks for better listening experience
           if (idx > 0) {
             u.volume = 0.9 // Slightly reduce volume for smoother transitions
           }
@@ -177,15 +181,15 @@ export default function StoryRetellApp() {
           u.onend = () => {
             if (cancelled) return
             idx++
-            // Add small delay between sentences for better flow
-            setTimeout(() => queueNext(), 200)
+            // Add small delay between chunks for better flow
+            setTimeout(() => queueNext(), 300)
           }
 
           u.onerror = (error) => {
             console.warn('TTS Error:', error)
             if (cancelled) return
             idx++
-            setTimeout(() => queueNext(), 100)
+            setTimeout(() => queueNext(), 200)
           }
 
           try {
@@ -193,7 +197,7 @@ export default function StoryRetellApp() {
           } catch (error) {
             console.warn('TTS speak error:', error)
             idx++
-            setTimeout(() => queueNext(), 100)
+            setTimeout(() => queueNext(), 200)
           }
         }
 
@@ -553,9 +557,43 @@ function phaseLabel(phase: Phase, duration?: number) {
 function splitIntoSentences(text: string): string[] {
   const cleaned = (text || "").replace(/\s+/g, " ").trim()
   if (!cleaned) return []
-  // split on sentence boundaries
-  const parts = cleaned.split(/(?<=[.!?])\s+/)
-  return parts.filter(Boolean)
+
+  // More robust sentence splitting for the story data format
+  // Split on periods, exclamation marks, question marks followed by space or end of string
+  const sentences = cleaned.split(/(?<=[.!?])(?=\s|$)/)
+
+  // Filter out empty strings and trim each sentence
+  return sentences
+    .map(s => s.trim())
+    .filter(s => s.length > 0)
+    .filter(s => !/^\d+\.$/.test(s)) // Remove standalone numbers like "1." "2." etc.
+}
+
+function splitIntoReadableChunks(text: string, maxLength: number = 150): string[] {
+  const sentences = splitIntoSentences(text)
+  const chunks: string[] = []
+  let currentChunk = ""
+
+  for (const sentence of sentences) {
+    // If adding this sentence would make chunk too long, start new chunk
+    if (currentChunk && (currentChunk.length + sentence.length + 1) > maxLength) {
+      if (currentChunk.trim()) {
+        chunks.push(currentChunk.trim())
+      }
+      currentChunk = sentence
+    } else {
+      // Add sentence to current chunk
+      currentChunk += (currentChunk ? " " : "") + sentence
+    }
+  }
+
+  // Add the last chunk if it exists
+  if (currentChunk.trim()) {
+    chunks.push(currentChunk.trim())
+  }
+
+  // If no chunks were created (shouldn't happen), return original text as single chunk
+  return chunks.length > 0 ? chunks : [text]
 }
 
 function parsePartENumberedStories(raw: string): string[] {
