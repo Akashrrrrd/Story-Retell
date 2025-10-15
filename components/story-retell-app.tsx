@@ -604,13 +604,12 @@ export default function StoryRetellApp() {
     // Phase: listening
     setPhase("listening")
     const story = selectedStory.text
-    const listenStart = Date.now()
-    const storyDuration = estimateStoryDuration(story) // Calculate dynamic duration
 
-    startTimedPhase(storyDuration, () => {
-      // end of listening (cancel any remaining TTS)
-      ttsCancelRef.current?.()
-      // proceed to prep
+    // Start TTS and handle completion properly
+    try {
+      await speakStory(story)
+      // TTS finished - immediately move to prep phase
+      console.log('TTS completed, moving to prep phase')
       setPhase("prep")
       startTimedPhase(PREP_MS, () => {
         beep(500, 880, 'start') // speak beep - higher pitch for start
@@ -652,20 +651,48 @@ export default function StoryRetellApp() {
           setPhase("result")
         })
       })
-    })
-
-    // Kick off TTS - let it run for its full duration
-    try {
-      await speakStory(story)
-    } catch {
-      // ignore TTS errors
-    } finally {
-      const elapsed = Date.now() - listenStart
-      if (elapsed < storyDuration) {
-        // Timer will move to next phase; nothing else to do
-      }
+    } catch (error) {
+      console.error('TTS failed:', error)
+      // Even if TTS fails, move to prep phase
+      setPhase("prep")
+      startTimedPhase(PREP_MS, () => {
+        beep(500, 880, 'start')
+        setPhase("speaking")
+        startRecognition()
+        startTimedPhase(SPEAK_MS, () => {
+          beep(500, 660, 'end')
+          stopRecognition()
+          setPhase("evaluating")
+          const tr = (transcriptRef.current || "").trim()
+          const currentStory = stories[currentStoryIndex]
+          
+          const storyKeywords = currentStory?.keyWords || []
+          const score = storyKeywords.length > 0 
+            ? computeMatchScoreWithKeywords(story, tr, storyKeywords)
+            : computeMatchScore(story, tr)
+            
+          const sessionResult = {
+            percentage: score.percentage,
+            matchedKeywords: score.matchedKeywords,
+            missingKeywords: score.missingKeywords,
+            transcript: tr,
+            totalKeywords: score.totalKeywords,
+          }
+          setResult(sessionResult)
+          
+          const session: PracticeSession = {
+            id: Date.now().toString(),
+            storyIndex: idx,
+            timestamp: new Date(),
+            score: score.percentage,
+            duration: SPEAK_MS
+          }
+          setPracticeHistory(prev => [session, ...prev.slice(0, 9)])
+          setPhase("result")
+        })
+      })
     }
-  }, [stories, selectedDifficulty, estimateStoryDuration, startTimedPhase, beep, speakStory, startRecognition, stopRecognition])
+  }, [stories, selectedDifficulty, startTimedPhase, beep, speakStory, startRecognition, stopRecognition])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -876,7 +903,7 @@ export default function StoryRetellApp() {
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Badge variant={phase === "idle" ? "secondary" : phase === "result" ? "default" : "destructive"}>
-                  {phaseLabel(phase, currentStoryDuration)}
+                  {phaseLabel(phase)}
                 </Badge>
           </div>
               {timeRemaining > 0 && (
@@ -1352,8 +1379,7 @@ function phaseLabel(phase: Phase, duration?: number) {
     case "idle":
       return "Ready"
     case "listening":
-      const durationSeconds = duration ? Math.ceil(duration / 1000) : 30
-      return `Listening to Story (${durationSeconds}s)`
+      return "Listening to Story"
     case "prep":
       return "Prepare (5s)"
     case "speaking":
