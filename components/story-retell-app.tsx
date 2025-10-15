@@ -4,7 +4,52 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
+import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Separator } from "@/components/ui/separator"
+import { Volume2, VolumeX, Mic, MicOff, Play, Pause, RotateCcw, Trophy, Target, Clock } from "lucide-react"
 import { computeMatchScore } from "@/lib/scoring"
+
+// Web Speech API Type Definitions according to W3C specification
+interface SpeechSynthesisEvent extends Event {
+  readonly utterance: SpeechSynthesisUtterance
+  readonly charIndex: number
+  readonly charLength: number
+  readonly elapsedTime: number
+  readonly name: string
+}
+
+interface SpeechSynthesisErrorEvent extends SpeechSynthesisEvent {
+  readonly error: 'canceled' | 'interrupted' | 'audio-busy' | 'audio-hardware' | 'network' | 'synthesis-unavailable' | 'synthesis-failed' | 'language-unavailable' | 'voice-unavailable' | 'text-too-long' | 'invalid-argument' | 'not-allowed'
+}
+
+interface SpeechRecognitionEvent extends Event {
+  readonly resultIndex: number
+  readonly results: SpeechRecognitionResultList
+}
+
+interface SpeechRecognitionErrorEvent extends Event {
+  readonly error: 'no-speech' | 'aborted' | 'audio-capture' | 'network' | 'not-allowed' | 'service-not-allowed' | 'language-not-supported' | 'phrases-not-supported'
+  readonly message: string
+}
+
+interface SpeechRecognitionResultList {
+  readonly length: number
+  item(index: number): SpeechRecognitionResult
+  [index: number]: SpeechRecognitionResult
+}
+
+interface SpeechRecognitionResult {
+  readonly length: number
+  item(index: number): SpeechRecognitionAlternative
+  [index: number]: SpeechRecognitionAlternative
+  readonly isFinal: boolean
+}
+
+interface SpeechRecognitionAlternative {
+  readonly transcript: string
+  readonly confidence: number
+}
 
 type Phase = "idle" | "listening" | "prep" | "speaking" | "evaluating" | "result"
 
@@ -16,6 +61,30 @@ type Result = {
   totalKeywords: number
 }
 
+type PracticeSession = {
+  id: string
+  storyIndex: number
+  timestamp: Date
+  score: number
+  duration: number
+}
+
+type VoiceSettings = {
+  selectedVoice: string
+  volume: number
+  rate: number
+}
+
+type StoryDifficulty = "easy" | "medium" | "hard"
+
+type StoryWithDifficulty = {
+  id: number
+  text: string
+  difficulty: StoryDifficulty
+  wordCount: number
+  keyWords: string[]
+}
+
 const STORY_LISTEN_MS = 30_000 // Minimum time, will be extended for longer stories
 const PREP_MS = 5_000
 const SPEAK_MS = 40_000
@@ -24,15 +93,43 @@ export default function StoryRetellApp() {
   const [phase, setPhase] = useState<Phase>("idle")
   const [progress, setProgress] = useState(0)
   const [currentStoryIndex, setCurrentStoryIndex] = useState<number | null>(null)
-  const [stories, setStories] = useState<string[]>([])
+  const [stories, setStories] = useState<StoryWithDifficulty[]>([])
   const [result, setResult] = useState<Result | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [selectedDifficulty, setSelectedDifficulty] = useState<StoryDifficulty | "all">("all")
+  const [practiceHistory, setPracticeHistory] = useState<PracticeSession[]>([])
+  const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>({
+    selectedVoice: '',
+    volume: 1.0,
+    rate: 0.8
+  })
+  const [timeRemaining, setTimeRemaining] = useState<number>(0)
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([])
+  const [showVoiceSettings, setShowVoiceSettings] = useState(false)
 
   const ttsCancelRef = useRef<() => void>(() => {})
   const recognitionRef = useRef<any>(null)
   const transcriptRef = useRef<string>("")
   const timerRef = useRef<number | null>(null)
   const startTsRef = useRef<number>(0)
+
+  // Categorize story difficulty based on text characteristics
+  const categorizeStoryDifficulty = useCallback((text: string): StoryDifficulty => {
+    const wordCount = text.split(/\s+/).length
+    const sentenceCount = splitIntoSentences(text).length
+    const avgWordsPerSentence = wordCount / sentenceCount
+    
+    // Calculate complexity score based on multiple factors
+    const complexityScore = 
+      (wordCount / 100) * 0.4 +           // Length factor (40%)
+      (avgWordsPerSentence / 20) * 0.3 +  // Sentence complexity (30%)
+      (text.match(/[A-Z]{2,}/g)?.length || 0) * 0.1 + // Proper nouns (10%)
+      (text.match(/[.,!?;:]/g)?.length || 0) / wordCount * 100 * 0.2 // Punctuation density (20%)
+    
+    if (complexityScore < 1.5) return "easy"
+    if (complexityScore < 2.5) return "medium"
+    return "hard"
+  }, [])
 
   // Estimate story duration for TTS (rough approximation)
   const estimateStoryDuration = useCallback((text: string): number => {
@@ -53,23 +150,30 @@ export default function StoryRetellApp() {
     return Math.max(estimatedSeconds * 1000, STORY_LISTEN_MS) // at least 30 seconds
   }, [])
 
-  // Fetch and parse stories from public data files (no text shown to user)
+  // Fetch and parse stories from JSON data file
   useEffect(() => {
     let cancelled = false
     async function load() {
       try {
-        const [partE, readAloud] = await Promise.all([
-          fetch("/data/part-e.txt").then((r) => r.text()),
-          fetch("/data/read-aloud.txt").then((r) => r.text()),
-        ])
+        const response = await fetch("/data/stories.json")
+        if (!response.ok) throw new Error("Failed to fetch stories")
+        
+        const data = await response.json()
         if (cancelled) return
 
-        const storiesA = parsePartENumberedStories(partE)
-        const storiesB = parseParagraphStories(readAloud)
-        const all = [...storiesA, ...storiesB].filter(Boolean)
-        setStories(all)
+        // Use stories directly from JSON with their pre-defined difficulty and keywords
+        const storiesWithDifficulty: StoryWithDifficulty[] = data.stories.map((story: any) => ({
+          id: story.id,
+          text: story.text,
+          difficulty: story.difficulty,
+          wordCount: story.wordCount,
+          keyWords: story.keyWords || []
+        }))
+        
+        setStories(storiesWithDifficulty)
       } catch (e) {
         setError("Failed to load stories. Please refresh.")
+        console.error("Error loading stories:", e)
       }
     }
     load()
@@ -101,10 +205,17 @@ export default function StoryRetellApp() {
     }
   }, [])
 
-  // Select two different TTS voices (aiming for “mixed” voices)
+  // Enhanced voice selection with user preferences
   const pickVoices = useCallback((): SpeechSynthesisVoice[] => {
     const voices = window.speechSynthesis.getVoices()
     if (!voices || voices.length === 0) return []
+    
+    // If user has selected a specific voice, use it
+    if (voiceSettings.selectedVoice) {
+      const selectedVoice = voices.find(v => v.name === voiceSettings.selectedVoice)
+      if (selectedVoice) return [selectedVoice]
+    }
+    
     // Try to pick distinct-sounding English voices
     const en = voices.filter((v) => /en/i.test(v.lang || ""))
     // Heuristic: prefer names mentioning Male/Female; else pick two different vendors
@@ -123,103 +234,108 @@ export default function StoryRetellApp() {
       }
     }
     return chosen.slice(0, 2)
+  }, [voiceSettings.selectedVoice])
+
+  // Load available voices
+  useEffect(() => {
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices()
+      setAvailableVoices(voices.filter(v => /en/i.test(v.lang || "")))
+    }
+    
+    loadVoices()
+    // Some browsers load voices asynchronously
+    if (window.speechSynthesis.onvoiceschanged !== undefined) {
+      window.speechSynthesis.onvoiceschanged = loadVoices
+    }
   }, [])
 
-  // Speak story for up to STORY_LISTEN_MS, alternating voices by sentence
+  // TTS implementation using correct Web Speech API specification
   const speakStory = useCallback(
     async (text: string) => {
       return new Promise<void>((resolve) => {
-        const synth = window.speechSynthesis
-        if (!synth) {
+        const synthesis = window.speechSynthesis
+        if (!synthesis) {
+          console.error("Speech synthesis not supported")
           resolve()
           return
         }
 
-        // Split into readable chunks instead of individual sentences
-        const chunks = splitIntoReadableChunks(text, 180) // Slightly longer chunks for better flow
-        const voices = pickVoices()
-        let cancelled = false
-        let idx = 0
+        // Cancel any ongoing speech according to Web Speech API
+        synthesis.cancel()
 
-        const queueNext = () => {
-          if (cancelled) return
-          if (idx >= chunks.length) {
-            // Add a small delay before resolving to ensure last chunk completes
-            setTimeout(() => resolve(), 500)
-            return
-          }
+        // Create utterance using Web Speech API specification
+        const utterance = new SpeechSynthesisUtterance(text)
+        
+        // Set properties according to Web Speech API spec
+        utterance.lang = "en-US"
+        utterance.rate = voiceSettings.rate
+        utterance.volume = voiceSettings.volume
+        utterance.pitch = 1.0
 
-          const chunk = chunks[idx].trim()
-          if (!chunk) {
-            idx++
-            queueNext()
-            return
-          }
-
-          const u = new SpeechSynthesisUtterance(chunk)
-
-          // Use slower rate for better comprehension (0.8 instead of 1.0)
-          u.rate = 0.8
-
-          // Add slight pause between chunks for better listening experience
-          if (idx > 0) {
-            u.volume = 0.9 // Slightly reduce volume for smoother transitions
-          }
-
-          if (voices.length > 0) {
-            u.voice = voices[idx % voices.length]
-          }
-
-          u.onstart = () => {
-            // Ensure audio doesn't get interrupted
-            if (cancelled) {
-              synth.cancel()
-              return
-            }
-          }
-
-          u.onend = () => {
-            if (cancelled) return
-            idx++
-            // Add small delay between chunks for better flow
-            setTimeout(() => queueNext(), 300)
-          }
-
-          u.onerror = (error) => {
-            console.warn('TTS Error:', error)
-            if (cancelled) return
-            idx++
-            setTimeout(() => queueNext(), 200)
-          }
-
-          try {
-            synth.speak(u)
-          } catch (error) {
-            console.warn('TTS speak error:', error)
-            idx++
-            setTimeout(() => queueNext(), 200)
+        // Try to select an English voice if available
+        const voices = synthesis.getVoices()
+        if (voices.length > 0) {
+          const englishVoice = voices.find(voice => 
+            voice.lang.startsWith('en') && voice.localService
+          ) || voices.find(voice => voice.lang.startsWith('en')) || voices[0]
+          
+          if (englishVoice) {
+            utterance.voice = englishVoice
+            console.log('Using voice:', englishVoice.name, englishVoice.lang)
           }
         }
 
-        // Start speaking after a brief delay to ensure proper initialization
-        setTimeout(() => queueNext(), 100)
+        // Event handlers according to Web Speech API specification
+        utterance.onstart = (event: SpeechSynthesisEvent) => {
+          console.log('TTS started speaking:', event.name)
+        }
 
+        utterance.onend = (event: SpeechSynthesisEvent) => {
+          console.log('TTS finished speaking:', event.name)
+          resolve()
+        }
+
+        utterance.onerror = (event: SpeechSynthesisErrorEvent) => {
+          console.error('TTS Error:', event.error, event.name)
+          resolve()
+        }
+
+        utterance.onpause = (event: SpeechSynthesisEvent) => {
+          console.log('TTS paused:', event.name)
+        }
+
+        utterance.onresume = (event: SpeechSynthesisEvent) => {
+          console.log('TTS resumed:', event.name)
+        }
+
+        utterance.onmark = (event: SpeechSynthesisEvent) => {
+          console.log('TTS mark reached:', event.name, event.charIndex)
+        }
+
+        utterance.onboundary = (event: SpeechSynthesisEvent) => {
+          console.log('TTS boundary reached:', event.name, event.charIndex)
+        }
+
+        // Start speaking using Web Speech API
+        console.log('Starting TTS speech...')
+        synthesis.speak(utterance)
+
+        // Set up cancellation
         ttsCancelRef.current = () => {
           try {
-            cancelled = true
-            synth.cancel()
-            // Wait a moment for cancellation to complete before resolving
-            setTimeout(() => resolve(), 100)
+            synthesis.cancel()
+            resolve()
           } catch {
             resolve()
           }
         }
       })
     },
-    [pickVoices],
+    [voiceSettings],
   )
 
-  // Timers with progress
+  // Simplified timers with progress and countdown (no pause functionality)
   const startTimedPhase = useCallback((ms: number, onDone: () => void) => {
     if (timerRef.current) {
       window.clearInterval(timerRef.current)
@@ -227,52 +343,91 @@ export default function StoryRetellApp() {
     }
     startTsRef.current = Date.now()
     setProgress(0)
+    setTimeRemaining(ms)
+    
     timerRef.current = window.setInterval(() => {
       const elapsed = Date.now() - startTsRef.current
+      const remaining = Math.max(0, ms - elapsed)
       const p = Math.min(100, Math.round((elapsed / ms) * 100))
+      
       setProgress(p)
+      setTimeRemaining(remaining)
+      
       if (elapsed >= ms) {
         if (timerRef.current) {
           window.clearInterval(timerRef.current)
           timerRef.current = null
         }
+        setTimeRemaining(0)
         onDone()
       }
     }, 100)
   }, [])
 
-  // Speech recognition (Chrome): capture transcript during SPEAK_MS
+  // Enhanced Speech recognition using correct Web Speech API
   const startRecognition = useCallback(() => {
     transcriptRef.current = ""
-    const SR: any = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition
-    if (!SR) return null
-    const rec = new SR()
-    rec.lang = "en-US"
-    rec.continuous = true
-    rec.interimResults = true
-    rec.onresult = (event: any) => {
+    
+    // Use correct Web Speech API according to W3C specification
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (!SpeechRecognition) {
+      console.warn('Speech Recognition not supported')
+      return null
+    }
+    
+    const recognition = new SpeechRecognition()
+    
+    // Configure according to Web Speech API specification
+    recognition.lang = "en-US"
+    recognition.continuous = true
+    recognition.interimResults = true
+    recognition.maxAlternatives = 1
+    
+    // Enhanced result processing for better accuracy
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
       let finalChunk = ""
+      
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        const res = event.results[i]
-        if (res.isFinal) {
-          finalChunk += res[0].transcript + " "
+        const result = event.results[i]
+        if (result.isFinal) {
+          finalChunk += result[0].transcript + " "
         }
       }
-      if (finalChunk) transcriptRef.current += finalChunk
+      
+      if (finalChunk) {
+        transcriptRef.current += finalChunk
+        console.log('Final transcript:', finalChunk)
+      }
     }
-    rec.onerror = () => {
-      // swallow errors; we’ll still end phase and score what we have
+    
+    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+      console.warn('Speech recognition error:', event.error, event.message)
+      // Continue with whatever transcript we have
     }
-    rec.onend = () => {
-      // handled by phase timer
+    
+    recognition.onend = () => {
+      console.log('Speech recognition ended')
     }
+    
+    recognition.onstart = () => {
+      console.log('Speech recognition started')
+    }
+    
+    recognition.onsoundstart = () => {
+      console.log('Sound detected')
+    }
+    
+    recognition.onspeechstart = () => {
+      console.log('Speech detected')
+    }
+    
     try {
-      rec.start()
-      recognitionRef.current = rec
-    } catch {
-      // ignore
+      recognition.start()
+      recognitionRef.current = recognition
+    } catch (error) {
+      console.error('Failed to start speech recognition:', error)
     }
-    return rec
+    return recognition
   }, [])
 
   const stopRecognition = useCallback(() => {
@@ -295,13 +450,25 @@ export default function StoryRetellApp() {
       setError("Stories not loaded yet. Please wait a moment.")
       return
     }
-    // Pick a random story each run
-    const idx = Math.floor(Math.random() * stories.length)
-    setCurrentStoryIndex(idx)
+    // Filter stories by selected difficulty
+    const filteredStories = selectedDifficulty === "all" 
+      ? stories 
+      : stories.filter(story => story.difficulty === selectedDifficulty)
+    
+    if (filteredStories.length === 0) {
+      setError(`No stories available for ${selectedDifficulty} difficulty level.`)
+      return
+    }
+
+    // Pick a random story from filtered set
+    const idx = Math.floor(Math.random() * filteredStories.length)
+    const selectedStory = filteredStories[idx]
+    const originalIndex = stories.findIndex(story => story === selectedStory)
+    setCurrentStoryIndex(originalIndex)
 
     // Phase: listening
     setPhase("listening")
-    const story = stories[idx]
+    const story = selectedStory.text
     const listenStart = Date.now()
     const storyDuration = estimateStoryDuration(story) // Calculate dynamic duration
 
@@ -322,13 +489,24 @@ export default function StoryRetellApp() {
           setPhase("evaluating")
           const tr = (transcriptRef.current || "").trim()
           const score = computeMatchScore(story, tr)
-          setResult({
+          const sessionResult = {
             percentage: score.percentage,
             matchedKeywords: score.matchedKeywords,
             missingKeywords: score.missingKeywords,
             transcript: tr,
             totalKeywords: score.totalKeywords,
-          })
+          }
+          setResult(sessionResult)
+          
+          // Save to practice history
+          const session: PracticeSession = {
+            id: Date.now().toString(),
+            storyIndex: idx,
+            timestamp: new Date(),
+            score: score.percentage,
+            duration: SPEAK_MS
+          }
+          setPracticeHistory(prev => [session, ...prev.slice(0, 9)]) // Keep last 10 sessions
           setPhase("result")
         })
       })
@@ -345,7 +523,7 @@ export default function StoryRetellApp() {
         // Timer will move to next phase; nothing else to do
       }
     }
-  }, [stories, estimateStoryDuration, startTimedPhase, beep, speakStory, startRecognition, stopRecognition])
+  }, [stories, selectedDifficulty, estimateStoryDuration, startTimedPhase, beep, speakStory, startRecognition, stopRecognition])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -367,80 +545,293 @@ export default function StoryRetellApp() {
 
   const currentStoryDuration = useMemo(() => {
     if (currentStoryIndex == null || !stories[currentStoryIndex]) return STORY_LISTEN_MS
-    return estimateStoryDuration(stories[currentStoryIndex])
+    return estimateStoryDuration(stories[currentStoryIndex].text)
   }, [currentStoryIndex, stories, estimateStoryDuration])
 
   const [speechSupported, setSpeechSupported] = useState(false)
   const [recoSupported, setRecoSupported] = useState(false)
 
   useEffect(() => {
-    setSpeechSupported("speechSynthesis" in window)
-
-    // Check if speech synthesis is actually available and working
-    if ("speechSynthesis" in window) {
-      const testUtterance = new SpeechSynthesisUtterance("Test")
-      testUtterance.rate = 0.8
-      testUtterance.volume = 0.1 // Very quiet test
-
-      testUtterance.onend = () => {
+    // TTS support detection using Web Speech API specification
+    const checkTTS = () => {
+      const synthesis = window.speechSynthesis
+      if (synthesis) {
+        console.log("Speech synthesis available, checking functionality...")
+        
+        // Test TTS with a simple utterance according to Web Speech API
+        const testUtterance = new SpeechSynthesisUtterance("test")
+        testUtterance.lang = "en-US"
+        testUtterance.volume = 0.01 // Very quiet test
+        testUtterance.rate = 2.0 // Very fast
+        testUtterance.pitch = 1.0
+        
+        let testCompleted = false
+        
+        // Event handlers according to Web Speech API specification
+        testUtterance.onstart = (event: SpeechSynthesisEvent) => {
+          if (!testCompleted) {
+            testCompleted = true
         setSpeechSupported(true)
-      }
-
-      testUtterance.onerror = () => {
+            console.log("TTS test passed - speech synthesis works:", event.name)
+          }
+        }
+        
+        testUtterance.onend = (event: SpeechSynthesisEvent) => {
+          if (!testCompleted) {
+            testCompleted = true
+            setSpeechSupported(true)
+            console.log("TTS test passed - speech synthesis works:", event.name)
+          }
+        }
+        
+        testUtterance.onerror = (event: SpeechSynthesisErrorEvent) => {
+          if (!testCompleted) {
+            testCompleted = true
         setSpeechSupported(false)
-      }
-
-      try {
-        window.speechSynthesis.speak(testUtterance)
-      } catch {
+            console.log("TTS test failed - speech synthesis not working:", event.error, event.name)
+          }
+        }
+        
+        // Timeout after 3 seconds
+        setTimeout(() => {
+          if (!testCompleted) {
+            testCompleted = true
+            setSpeechSupported(false)
+            console.log("TTS test timeout - speech synthesis not working")
+          }
+        }, 3000)
+        
+        try {
+          // Cancel any existing speech and start test
+          synthesis.cancel()
+          synthesis.speak(testUtterance)
+        } catch (error) {
         setSpeechSupported(false)
+          console.log("TTS test exception:", error)
+        }
+      } else {
+        setSpeechSupported(false)
+        console.log("TTS not supported - speechSynthesis not available")
       }
     }
 
-    const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition
+    // Check Speech Recognition support according to Web Speech API
+    const checkSTT = () => {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     setRecoSupported(!!SpeechRecognition)
-  }, [])
-  return (
-    <div className="rounded-lg border bg-card text-card-foreground p-4 md:p-6 flex flex-col gap-4">
-      <section className="flex flex-col gap-2">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex flex-col">
-            <span className="text-sm text-muted-foreground">Status</span>
-            <strong className="text-base">{phaseLabel(phase, currentStoryDuration)}</strong>
-          </div>
-          <div className="text-right">
-            <span className="text-sm text-muted-foreground">Story</span>
-            <div className="text-base">{currentStoryNumber ?? "-"}</div>
-          </div>
-        </div>
-        <Progress value={progress} className="h-2" />
-      </section>
+      
+      if (SpeechRecognition) {
+        console.log("Speech Recognition available")
+      } else {
+        console.log("Speech Recognition not supported")
+      }
+    }
 
+    // Delay TTS test to allow page to fully load
+    setTimeout(checkTTS, 1000)
+    checkSTT()
+  }, [])
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyPress = (event: KeyboardEvent) => {
+      // Only handle shortcuts when not typing in input fields
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+        return
+      }
+
+      switch (event.key) {
+        case ' ': // Space bar
+          event.preventDefault()
+          if (phase === "idle" || phase === "result") {
+            startPractice()
+          }
+          break
+        case 'Escape':
+          if (phase === "listening" || phase === "prep" || phase === "speaking") {
+            event.preventDefault()
+            try {
+              ttsCancelRef.current?.()
+            } catch {}
+            try {
+              stopRecognition()
+            } catch {}
+              setPhase("idle")
+              setProgress(0)
+              setResult(null)
+              setCurrentStoryIndex(null)
+              setTimeRemaining(0)
+          }
+          break
+        case 's':
+          if (phase === "listening") {
+            event.preventDefault()
+            ttsCancelRef.current?.()
+          }
+          break
+        case 'r':
+          if (phase === "result") {
+            event.preventDefault()
+              setPhase("idle")
+              setProgress(0)
+              setResult(null)
+              setCurrentStoryIndex(null)
+              setTimeRemaining(0)
+          }
+          break
+        case 'n':
+          if (phase === "result") {
+            event.preventDefault()
+            setResult(null)
+            setPhase("idle")
+            setProgress(0)
+            setTimeRemaining(0)
+            // setIsPaused(false) // Removed pause functionality
+          }
+          break
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyPress)
+    return () => window.removeEventListener('keydown', handleKeyPress)
+  }, [phase, startPractice, stopRecognition])
+  // Helper function to format time
+  const formatTime = (ms: number) => {
+    const seconds = Math.ceil(ms / 1000)
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return mins > 0 ? `${mins}:${secs.toString().padStart(2, '0')}` : `${secs}s`
+  }
+
+  // Helper function to get phase icon
+  const getPhaseIcon = (phase: Phase) => {
+    switch (phase) {
+      case "listening": return <Volume2 className="h-4 w-4" />
+      case "prep": return <Clock className="h-4 w-4" />
+      case "speaking": return <Mic className="h-4 w-4" />
+      case "evaluating": return <Target className="h-4 w-4" />
+      case "result": return <Trophy className="h-4 w-4" />
+      default: return null
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Main Practice Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            {getPhaseIcon(phase)}
+            Story Retell Practice
+          </CardTitle>
+          <CardDescription>
+            Listen to a story, prepare your retelling, and get instant feedback on your performance.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Status Section */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Badge variant={phase === "idle" ? "secondary" : phase === "result" ? "default" : "destructive"}>
+                  {phaseLabel(phase, currentStoryDuration)}
+                </Badge>
+          </div>
+              {timeRemaining > 0 && (
+                <div className="text-2xl font-mono font-bold text-primary">
+                  {formatTime(timeRemaining)}
+          </div>
+              )}
+        </div>
+            
+            <div className="space-y-2">
+              <div className="text-sm text-muted-foreground">Story</div>
+              <div className="text-lg font-semibold">
+                {currentStoryNumber ? `Story #${currentStoryNumber}` : "Not Selected"}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="text-sm text-muted-foreground">Practice Sessions</div>
+              <div className="text-lg font-semibold">
+                {practiceHistory.length} completed
+              </div>
+            </div>
+          </div>
+
+          {/* Difficulty Selector */}
+          <div className="space-y-3">
+            <div className="text-sm font-medium">Story Difficulty</div>
+            <div className="flex flex-wrap gap-2">
+              {(["all", "easy", "medium", "hard"] as const).map((diff) => (
+                <Button
+                  key={diff}
+                  variant={selectedDifficulty === diff ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSelectedDifficulty(diff)}
+                  disabled={phase === "listening" || phase === "prep" || phase === "speaking" || phase === "evaluating"}
+                >
+                  {diff === "all" ? "All Stories" : `${diff.charAt(0).toUpperCase() + diff.slice(1)}`}
+                  {diff !== "all" && (
+                    <Badge variant="secondary" className="ml-2 text-xs">
+                      {stories.filter(s => s.difficulty === diff).length}
+                    </Badge>
+                  )}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          {/* Progress Bar */}
+          {progress > 0 && (
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm text-muted-foreground">
+                <span>Progress</span>
+                <span>{progress}%</span>
+          </div>
+              <Progress value={progress} className="h-3" />
+        </div>
+          )}
+
+          {/* Browser Compatibility Warnings */}
       {!speechSupported && (
+            <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-md">
         <p className="text-sm text-destructive">
-          Your browser does not support speech synthesis properly. Audio playback may not work reliably. Try using Chrome or Edge for best results.
+          <strong>Text-to-Speech Not Available:</strong> Your browser environment doesn't support speech synthesis. 
+          This is common in automated browsers or certain configurations. 
+          For full functionality, please test in a regular Chrome or Edge browser where TTS works properly.
         </p>
+            </div>
       )}
       {!recoSupported && (
+            <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-md">
         <p className="text-sm text-destructive">
           Speech recognition not supported. We will still record time but cannot transcribe your retell automatically.
         </p>
-      )}
-      {error && <p className="text-sm text-destructive">{error}</p>}
+            </div>
+          )}
+          {error && (
+            <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-md">
+              <p className="text-sm text-destructive">{error}</p>
+            </div>
+          )}
 
-      <section className="flex items-center gap-3">
+          {/* Control Buttons */}
+          <div className="flex flex-wrap items-center gap-3">
         <Button
           onClick={startPractice}
           disabled={phase === "listening" || phase === "prep" || phase === "speaking" || phase === "evaluating"}
+              size="lg"
         >
           {phase === "idle" || phase === "result" ? "Start Practice" : "Restart"}
         </Button>
 
         {phase === "listening" && (
-          <Button variant="secondary" onClick={() => ttsCancelRef.current?.()}>
+              <Button variant="outline" onClick={() => ttsCancelRef.current?.()} size="lg">
             Skip Audio
           </Button>
         )}
+            
         {(phase === "listening" || phase === "prep" || phase === "speaking") && (
           <Button
             variant="outline"
@@ -455,52 +846,236 @@ export default function StoryRetellApp() {
               setProgress(0)
               setResult(null)
               setCurrentStoryIndex(null)
+              setTimeRemaining(0)
             }}
+                size="lg"
           >
             Cancel
           </Button>
         )}
-      </section>
 
-      <section className={cn("rounded-md border p-3", phase === "result" ? "block" : "hidden")}>
-        {result && (
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between">
+            <Button
+              variant="ghost"
+              onClick={() => setShowVoiceSettings(!showVoiceSettings)}
+              size="lg"
+            >
+              <Volume2 className="h-4 w-4" />
+              Voice Settings
+            </Button>
+
+            <Button
+              variant="ghost"
+              onClick={() => {
+                const synthesis = window.speechSynthesis
+                if (synthesis) {
+                  console.log('Test TTS button clicked')
+                  
+                  // Create utterance using Web Speech API specification
+                  const utterance = new SpeechSynthesisUtterance("Test test, this is a test of the text to speech system.")
+                  utterance.lang = "en-US"
+                  utterance.rate = 0.8
+                  utterance.volume = 0.7
+                  utterance.pitch = 1.0
+                  
+                  // Event handlers according to Web Speech API
+                  utterance.onstart = (event: SpeechSynthesisEvent) => {
+                    console.log('Test TTS started:', event.name)
+                  }
+                  
+                  utterance.onend = (event: SpeechSynthesisEvent) => {
+                    console.log('Test TTS ended:', event.name)
+                  }
+                  
+                  utterance.onerror = (event: SpeechSynthesisErrorEvent) => {
+                    console.error('Test TTS error:', event.error, event.name)
+                  }
+                  
+                  // Cancel any ongoing speech and start new one
+                  synthesis.cancel()
+                  synthesis.speak(utterance)
+                } else {
+                  console.error('Speech synthesis not available')
+                }
+              }}
+              size="lg"
+            >
+              <Volume2 className="h-4 w-4" />
+              Test TTS
+            </Button>
+          </div>
+
+          {/* Voice Settings Panel */}
+          {showVoiceSettings && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Voice Settings</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
               <div>
-                <div className="text-sm text-muted-foreground">Match Score</div>
-                <div className="text-2xl font-semibold">{Math.round(result.percentage)}%</div>
+                  <label className="text-sm font-medium">Voice</label>
+                  <select
+                    value={voiceSettings.selectedVoice}
+                    onChange={(e) => setVoiceSettings(prev => ({ ...prev, selectedVoice: e.target.value }))}
+                    className="w-full mt-1 p-2 border rounded-md"
+                  >
+                    <option value="">Auto-select (Recommended)</option>
+                    {availableVoices.map(voice => (
+                      <option key={voice.name} value={voice.name}>
+                        {voice.name} ({voice.lang})
+                      </option>
+                    ))}
+                  </select>
               </div>
-              <div className="text-right">
-                <div className="text-sm text-muted-foreground">Keywords</div>
-                <div className="text-base">
-                  {result.matchedKeywords.length} / {result.totalKeywords}
+                
+              <div>
+                  <label className="text-sm font-medium">
+                    Speech Rate: {voiceSettings.rate.toFixed(1)}x
+                  </label>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="1.5"
+                    step="0.1"
+                    value={voiceSettings.rate}
+                    onChange={(e) => setVoiceSettings(prev => ({ ...prev, rate: parseFloat(e.target.value) }))}
+                    className="w-full mt-1"
+                  />
                 </div>
+                
+                <div>
+                  <label className="text-sm font-medium">
+                    Volume: {Math.round(voiceSettings.volume * 100)}%
+                  </label>
+                  <input
+                    type="range"
+                    min="0.1"
+                    max="1.0"
+                    step="0.1"
+                    value={voiceSettings.volume}
+                    onChange={(e) => setVoiceSettings(prev => ({ ...prev, volume: parseFloat(e.target.value) }))}
+                    className="w-full mt-1"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Results Section */}
+      {phase === "result" && result && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Trophy className="h-5 w-5" />
+              Practice Results
+            </CardTitle>
+            <CardDescription>
+              Great job! Here's how you performed on this story retelling exercise.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Score Display */}
+            <div className="text-center space-y-4">
+              <div className="text-6xl font-bold text-primary">
+                {Math.round(result.percentage)}%
+              </div>
+              <div className="text-lg text-muted-foreground">Match Score</div>
+              <div className="flex justify-center">
+                <Badge 
+                  variant={result.percentage >= 80 ? "default" : result.percentage >= 60 ? "secondary" : "destructive"}
+                  className="text-lg px-4 py-2"
+                >
+                  {result.percentage >= 80 ? "Excellent" : result.percentage >= 60 ? "Good" : "Keep Practicing"}
+                </Badge>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <div className="text-sm font-medium mb-1">Matched Keywords</div>
-                <div className="text-sm text-pretty">
-                  {result.matchedKeywords.length > 0 ? result.matchedKeywords.join(", ") : "—"}
+            <Separator />
+
+            {/* Versant-Style Analysis */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <div className="text-center p-4 bg-muted rounded-lg">
+                <div className="text-2xl font-bold text-primary">{result.matchedKeywords.length}</div>
+                <div className="text-sm text-muted-foreground">Keywords Matched</div>
+                <div className="text-xs text-muted-foreground">out of {result.totalKeywords}</div>
                 </div>
+              <div className="text-center p-4 bg-muted rounded-lg">
+                <div className="text-2xl font-bold text-primary">
+                  {(result as any).contentWords || 0}
               </div>
-              <div>
-                <div className="text-sm font-medium mb-1">Missed Keywords</div>
-                <div className="text-sm text-pretty">
-                  {result.missingKeywords.length > 0 ? result.missingKeywords.join(", ") : "—"}
+                <div className="text-sm text-muted-foreground">Content Words</div>
+                <div className="text-xs text-muted-foreground">in story</div>
                 </div>
+              <div className="text-center p-4 bg-muted rounded-lg">
+                <div className="text-2xl font-bold text-primary">
+                  {(result as any).contentMatches || 0}
+                </div>
+                <div className="text-sm text-muted-foreground">Content Matches</div>
+                <div className="text-xs text-muted-foreground">you captured</div>
               </div>
             </div>
 
-            <div>
-              <div className="text-sm font-medium mb-1">Your Retell (transcript)</div>
-              <div className="text-sm text-muted-foreground text-pretty">
-                {result.transcript || "No transcript captured."}
+            {/* Keywords Analysis */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Badge variant="default" className="text-sm">
+                    {result.matchedKeywords.length} / {result.totalKeywords}
+                  </Badge>
+                  <span className="font-medium">Key Words Matched</span>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {result.matchedKeywords.length > 0 ? (
+                    result.matchedKeywords.map((keyword, index) => (
+                      <Badge key={index} variant="secondary" className="text-xs">
+                        {keyword}
+                      </Badge>
+                    ))
+                  ) : (
+                    <span className="text-muted-foreground text-sm">No keywords matched</span>
+                  )}
               </div>
             </div>
 
+              <div className="space-y-3">
             <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-sm">
+                    {result.missingKeywords.length}
+                  </Badge>
+                  <span className="font-medium">Key Words Missed</span>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {result.missingKeywords.length > 0 ? (
+                    result.missingKeywords.map((keyword, index) => (
+                      <Badge key={index} variant="outline" className="text-xs">
+                        {keyword}
+                      </Badge>
+                    ))
+                  ) : (
+                    <span className="text-green-600 text-sm">All keywords captured!</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Transcript */}
+            <div className="space-y-3">
+              <div className="font-medium flex items-center gap-2">
+                <Mic className="h-4 w-4" />
+                Your Retelling
+              </div>
+              <div className="p-4 bg-muted rounded-lg">
+                <p className="text-sm text-muted-foreground">
+                  {result.transcript || "No transcript captured. Make sure your microphone is working and try speaking more clearly."}
+                </p>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row gap-3">
               <Button
                 variant="secondary"
                 onClick={() => {
@@ -508,28 +1083,122 @@ export default function StoryRetellApp() {
                   setProgress(0)
                   setResult(null)
                   setCurrentStoryIndex(null)
+                  setTimeRemaining(0)
                 }}
+                className="flex-1"
+                size="lg"
               >
-                Practice Again
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Try Same Story
               </Button>
               <Button
                 onClick={() => {
                   setResult(null)
                   setPhase("idle")
                   setProgress(0)
+                  setTimeRemaining(0)
                   // keep story list loaded, pick another random on start
                 }}
+                className="flex-1"
+                size="lg"
               >
                 New Story
               </Button>
             </div>
-          </div>
-        )}
-      </section>
+          </CardContent>
+        </Card>
+      )}
 
-      <section className="text-xs text-muted-foreground">
-        Notes: Audio is TTS-only; story text is not displayed. You’ll get a beep to begin speaking and a beep to stop.
-      </section>
+      {/* Practice History */}
+      {practiceHistory.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Recent Practice Sessions</CardTitle>
+            <CardDescription>
+              Track your progress over time
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {practiceHistory.slice(0, 5).map((session, index) => {
+                const story = stories[session.storyIndex]
+                return (
+                  <div key={session.id} className="flex items-center justify-between p-3 border rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="text-lg font-mono">
+                        #{session.storyIndex + 1}
+          </div>
+                      <div>
+                        <div className="text-sm text-muted-foreground">
+                          {session.timestamp.toLocaleDateString()} at {session.timestamp.toLocaleTimeString()}
+                        </div>
+                        {story && (
+                          <Badge variant="outline" className="text-xs mt-1">
+                            {story.difficulty} ({story.wordCount} words)
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    <Badge 
+                      variant={session.score >= 80 ? "default" : session.score >= 60 ? "secondary" : "destructive"}
+                    >
+                      {session.score}%
+                    </Badge>
+                  </div>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Instructions */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="text-sm text-muted-foreground space-y-4">
+            <div>
+              <p><strong>Versant English Speaking Test Practice:</strong></p>
+              <ul className="list-disc list-inside space-y-1 ml-4">
+                <li>Listen carefully to the story (no text is shown, just like the real test)</li>
+                <li>Use the 5-second prep time to organize your thoughts</li>
+                <li>Retell the story in your own words when you hear the beep</li>
+                <li>Focus on meaningful content words (not connecting words like "and", "the", "it")</li>
+                <li>Get instant feedback on your content word accuracy</li>
+              </ul>
+            </div>
+            
+            <div>
+              <p><strong>Keyboard Shortcuts:</strong></p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2 text-xs">
+                <div className="flex justify-between">
+                  <span>Space</span>
+                  <span>Start practice</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Escape</span>
+                  <span>Cancel</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>S</span>
+                  <span>Skip audio</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>R</span>
+                  <span>Retry same story</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>N</span>
+                  <span>New story</span>
+                </div>
+              </div>
+            </div>
+            
+            <p className="mt-3 text-xs">
+              <strong>Note:</strong> For best results, use Chrome or Edge with a working microphone.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
@@ -596,36 +1265,3 @@ function splitIntoReadableChunks(text: string, maxLength: number = 150): string[
   return chunks.length > 0 ? chunks : [text]
 }
 
-function parsePartENumberedStories(raw: string): string[] {
-  // split lines beginning with "number."
-  const lines = raw.replace(/\r/g, "").split("\n")
-  const collected: string[] = []
-  let current: string[] = []
-  for (const line of lines) {
-    const l = line.trim()
-    if (/^\d+\./.test(l)) {
-      if (current.length > 0) {
-        collected.push(current.join(" ").trim())
-        current = []
-      }
-      current.push(l.replace(/^\d+\.\s*/, ""))
-    } else if (l.length > 0) {
-      current.push(l)
-    }
-  }
-  if (current.length > 0) collected.push(current.join(" ").trim())
-  return collected
-}
-
-function parseParagraphStories(raw: string): string[] {
-  // Grab the "Read Aloud" paragraphs (skip title lines)
-  const cleaned = raw.replace(/\r/g, "")
-  // Split by blank lines or double newline
-  const parts = cleaned
-    .split(/\n\s*\n+/)
-    .map((s) => s.trim())
-    .filter(Boolean)
-  // Remove potential header like "Read Aloud"
-  const withoutHeader = parts.filter((p) => !/^read aloud/i.test(p))
-  return withoutHeader
-}

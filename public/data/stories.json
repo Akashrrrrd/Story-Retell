@@ -1,0 +1,74 @@
+{
+  "stories": [
+    {
+      "id": 1,
+      "text": "It was a sunny day and two friends went out on the lake in a small boat. They were only out a short while when dark clouds started to roll in. They returned the boat to the shore as fast as they could. Unfortunately, they were soaking wet by the time they returned to their cabin.",
+      "difficulty": "easy",
+      "wordCount": 54,
+      "keyWords": ["sunny", "friends", "lake", "boat", "dark", "clouds", "returned", "shore", "soaking", "wet", "cabin"]
+    },
+    {
+      "id": 2,
+      "text": "Diana and Joe loved bike riding and rode their bikes everywhere. They decided they would train for a bike race. After many months of training, they competed in a race. Diana beat Joe, but only by 2 seconds.",
+      "difficulty": "easy",
+      "wordCount": 40,
+      "keyWords": ["Diana", "Joe", "bike", "riding", "everywhere", "train", "race", "months", "training", "competed", "beat", "seconds"]
+    },
+    {
+      "id": 3,
+      "text": "Two sisters lived in a house with a big yard where they played. Yesterday when they were playing outside together the younger sister lost her glasses. They both looked for them for a long time. Finally, the older sister found them. The younger sister said thank you and they went inside for lunch.",
+      "difficulty": "easy",
+      "wordCount": 52,
+      "keyWords": ["sisters", "house", "yard", "played", "yesterday", "playing", "outside", "younger", "lost", "glasses", "looked", "finally", "older", "found", "thank", "inside", "lunch"]
+    },
+    {
+      "id": 4,
+      "text": "A husband and wife went camping for the weekend. On the first day, they went on a long hike in the mountains. After the hike they were very hungry. When they returned to the camp, they found two bears eating their food. They decided to leave early and have dinner at a restaurant.",
+      "difficulty": "medium",
+      "wordCount": 52,
+      "keyWords": ["husband", "wife", "camping", "weekend", "hike", "mountains", "hungry", "returned", "camp", "bears", "eating", "food", "decided", "leave", "dinner", "restaurant"]
+    },
+    {
+      "id": 5,
+      "text": "Gary was sleeping when his alarm went off. He realised it was time to go to work. He put on his clothes quickly and brushed his teeth. He ran outside and waited for the bus. He boarded the bus and rode it until he got to his office. It was only when he walked into his empty office, did he realise it was a holiday and he was not required to work that day.",
+      "difficulty": "medium",
+      "wordCount": 66,
+      "keyWords": ["Gary", "sleeping", "alarm", "realised", "work", "clothes", "quickly", "brushed", "teeth", "ran", "outside", "waited", "bus", "boarded", "rode", "office", "walked", "empty", "holiday", "required"]
+    },
+    {
+      "id": 6,
+      "text": "It is John's parents' wedding anniversary. John wants to make a special dinner for them. He decides to make fish. While the fish is in the oven, John's phone rings. He forgets about the fish and it burns. When his parents come home, they all go out to eat in a restaurant.",
+      "difficulty": "medium",
+      "wordCount": 48,
+      "keyWords": ["John", "parents", "wedding", "anniversary", "special", "dinner", "decides", "fish", "oven", "phone", "rings", "forgets", "burns", "restaurant"]
+    },
+    {
+      "id": 7,
+      "text": "The longest road tunnel in the world is in Norway. Norway has a lot of mountains and narrow road passages, and difficult or dangerous conditions, so building tunnels is often the most sensible option. As a result, this country has over 900 tunnels. The longest road tunnel in the country is 24.5 kilometres in length and took about five years to construct. Cars drive through it in both directions, and there are four caves along the way where drivers can stop for a rest or turn around. It takes almost 20 minutes to get all the way through.",
+      "difficulty": "hard",
+      "wordCount": 90,
+      "keyWords": ["longest", "road", "tunnel", "world", "Norway", "mountains", "narrow", "passages", "difficult", "dangerous", "conditions", "building", "sensible", "option", "country", "kilometres", "length", "construct", "directions", "caves", "drivers", "rest", "minutes"]
+    },
+    {
+      "id": 8,
+      "text": "Monica was one of the most talented runners on the team. She was not only good at running, but she also loved doing it. She would get up early every morning and go for a long run before she went to school.",
+      "difficulty": "easy",
+      "wordCount": 40,
+      "keyWords": ["Monica", "talented", "runners", "team", "running", "loved", "early", "morning", "long", "run", "school"]
+    },
+    {
+      "id": 9,
+      "text": "Madison couldn't find her books anywhere. She looked in her room, but they weren't there. She looked on the bench in the hall. They weren't there either. The phone rang, and Madison answered it. It was her friend Kate. Madison had left her books in Kate's car when they drove home.",
+      "difficulty": "medium",
+      "wordCount": 51,
+      "keyWords": ["Madison", "find", "books", "anywhere", "looked", "room", "bench", "hall", "phone", "rang", "answered", "friend", "Kate", "left", "car", "drove", "home"]
+    },
+    {
+      "id": 10,
+      "text": "Stephanie had a pet rabbit that she had gotten from the pet store. She paid a lot of money for the rabbit, but after a few weeks, she realized that her pet was not well. She took the rabbit to the vet, who said that her pet had a bad stomach infection. Stephanie got some special medicine for the rabbit, and after about five days, her pet was much better.",
+      "difficulty": "medium",
+      "wordCount": 65,
+      "keyWords": ["Stephanie", "pet", "rabbit", "gotten", "store", "paid", "money", "weeks", "realized", "well", "vet", "stomach", "infection", "special", "medicine", "days", "better"]
+    }
+  ]
+}
