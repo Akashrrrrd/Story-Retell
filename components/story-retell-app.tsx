@@ -16,7 +16,7 @@ type Result = {
   totalKeywords: number
 }
 
-const STORY_LISTEN_MS = 30_000
+const STORY_LISTEN_MS = 30_000 // Minimum time, will be extended for longer stories
 const PREP_MS = 5_000
 const SPEAK_MS = 40_000
 
@@ -33,6 +33,22 @@ export default function StoryRetellApp() {
   const transcriptRef = useRef<string>("")
   const timerRef = useRef<number | null>(null)
   const startTsRef = useRef<number>(0)
+
+  // Estimate story duration for TTS (rough approximation)
+  const estimateStoryDuration = useCallback((text: string): number => {
+    const sentences = splitIntoSentences(text)
+    const wordsPerSentence = 15 // average words per sentence
+    const wordsPerMinute = 150 // average speaking rate
+    const secondsPerWord = 60 / wordsPerMinute
+
+    // Estimate: 3-5 seconds per sentence + buffer for natural pauses
+    const estimatedSeconds = Math.max(
+      sentences.length * 4, // minimum 4 seconds per sentence
+      text.length * secondsPerWord * 1.2 // 20% buffer for pauses and natural speech
+    )
+
+    return Math.max(estimatedSeconds * 1000, STORY_LISTEN_MS) // at least 30 seconds
+  }, [])
 
   // Fetch and parse stories from public data files (no text shown to user)
   useEffect(() => {
@@ -242,7 +258,9 @@ export default function StoryRetellApp() {
     setPhase("listening")
     const story = stories[idx]
     const listenStart = Date.now()
-    startTimedPhase(STORY_LISTEN_MS, () => {
+    const storyDuration = estimateStoryDuration(story) // Calculate dynamic duration
+
+    startTimedPhase(storyDuration, () => {
       // end of listening (cancel any remaining TTS)
       ttsCancelRef.current?.()
       // proceed to prep
@@ -271,19 +289,18 @@ export default function StoryRetellApp() {
       })
     })
 
-    // Kick off TTS but ensure it doesn’t exceed 30s
-    // If TTS would run longer, timer will cancel via ttsCancelRef
+    // Kick off TTS - let it run for its full duration
     try {
       await speakStory(story)
     } catch {
       // ignore TTS errors
     } finally {
       const elapsed = Date.now() - listenStart
-      if (elapsed < STORY_LISTEN_MS) {
+      if (elapsed < storyDuration) {
         // Timer will move to next phase; nothing else to do
       }
     }
-  }, [stories, startTimedPhase, beep, speakStory, startRecognition, stopRecognition])
+  }, [stories, estimateStoryDuration, startTimedPhase, beep, speakStory, startRecognition, stopRecognition])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -303,6 +320,11 @@ export default function StoryRetellApp() {
     return currentStoryIndex + 1
   }, [currentStoryIndex])
 
+  const currentStoryDuration = useMemo(() => {
+    if (currentStoryIndex == null || !stories[currentStoryIndex]) return STORY_LISTEN_MS
+    return estimateStoryDuration(stories[currentStoryIndex])
+  }, [currentStoryIndex, stories, estimateStoryDuration])
+
   const [speechSupported, setSpeechSupported] = useState(false)
   const [recoSupported, setRecoSupported] = useState(false)
 
@@ -317,7 +339,7 @@ export default function StoryRetellApp() {
         <div className="flex items-center justify-between gap-4">
           <div className="flex flex-col">
             <span className="text-sm text-muted-foreground">Status</span>
-            <strong className="text-base">{phaseLabel(phase)}</strong>
+            <strong className="text-base">{phaseLabel(phase, currentStoryDuration)}</strong>
           </div>
           <div className="text-right">
             <span className="text-sm text-muted-foreground">Story</span>
@@ -447,12 +469,13 @@ export default function StoryRetellApp() {
 
 // Utils
 
-function phaseLabel(phase: Phase) {
+function phaseLabel(phase: Phase, duration?: number) {
   switch (phase) {
     case "idle":
       return "Ready"
     case "listening":
-      return "Listening to Story (30s)"
+      const durationSeconds = duration ? Math.ceil(duration / 1000) : 30
+      return `Listening to Story (${durationSeconds}s)`
     case "prep":
       return "Prepare (5s)"
     case "speaking":
