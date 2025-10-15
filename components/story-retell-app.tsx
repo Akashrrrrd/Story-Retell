@@ -39,12 +39,13 @@ export default function StoryRetellApp() {
     const sentences = splitIntoSentences(text)
     const wordsPerSentence = 15 // average words per sentence
     const wordsPerMinute = 150 // average speaking rate
-    const secondsPerWord = 60 / wordsPerMinute
+    const speechRate = 0.8 // slower rate for better comprehension
+    const secondsPerWord = (60 / wordsPerMinute) / speechRate
 
     // Estimate: 3-5 seconds per sentence + buffer for natural pauses
     const estimatedSeconds = Math.max(
-      sentences.length * 4, // minimum 4 seconds per sentence
-      text.length * secondsPerWord * 1.2 // 20% buffer for pauses and natural speech
+      sentences.length * 4.5, // slightly more time per sentence with slower rate
+      text.length * secondsPerWord * 1.3 // 30% buffer for pauses and natural speech
     )
 
     return Math.max(estimatedSeconds * 1000, STORY_LISTEN_MS) // at least 30 seconds
@@ -139,35 +140,75 @@ export default function StoryRetellApp() {
         const queueNext = () => {
           if (cancelled) return
           if (idx >= sentences.length) {
-            resolve()
+            // Add a small delay before resolving to ensure last sentence completes
+            setTimeout(() => resolve(), 500)
             return
           }
-          const u = new SpeechSynthesisUtterance(sentences[idx])
+
+          const sentence = sentences[idx].trim()
+          if (!sentence) {
+            idx++
+            queueNext()
+            return
+          }
+
+          const u = new SpeechSynthesisUtterance(sentence)
+
+          // Use slower rate for better comprehension (0.8 instead of 1.0)
+          u.rate = 0.8
+
+          // Add slight pause between sentences for better listening experience
+          if (idx > 0) {
+            u.volume = 0.9 // Slightly reduce volume for smoother transitions
+          }
+
           if (voices.length > 0) {
             u.voice = voices[idx % voices.length]
           }
-          u.rate = 1.0
+
+          u.onstart = () => {
+            // Ensure audio doesn't get interrupted
+            if (cancelled) {
+              synth.cancel()
+              return
+            }
+          }
+
           u.onend = () => {
+            if (cancelled) return
             idx++
-            queueNext()
+            // Add small delay between sentences for better flow
+            setTimeout(() => queueNext(), 200)
           }
-          u.onerror = () => {
+
+          u.onerror = (error) => {
+            console.warn('TTS Error:', error)
+            if (cancelled) return
             idx++
-            queueNext()
+            setTimeout(() => queueNext(), 100)
           }
-          synth.speak(u)
+
+          try {
+            synth.speak(u)
+          } catch (error) {
+            console.warn('TTS speak error:', error)
+            idx++
+            setTimeout(() => queueNext(), 100)
+          }
         }
 
-        queueNext()
+        // Start speaking after a brief delay to ensure proper initialization
+        setTimeout(() => queueNext(), 100)
 
         ttsCancelRef.current = () => {
           try {
             cancelled = true
             synth.cancel()
+            // Wait a moment for cancellation to complete before resolving
+            setTimeout(() => resolve(), 100)
           } catch {
-            // ignore
+            resolve()
           }
-          resolve()
         }
       })
     },
@@ -330,6 +371,28 @@ export default function StoryRetellApp() {
 
   useEffect(() => {
     setSpeechSupported("speechSynthesis" in window)
+
+    // Check if speech synthesis is actually available and working
+    if ("speechSynthesis" in window) {
+      const testUtterance = new SpeechSynthesisUtterance("Test")
+      testUtterance.rate = 0.8
+      testUtterance.volume = 0.1 // Very quiet test
+
+      testUtterance.onend = () => {
+        setSpeechSupported(true)
+      }
+
+      testUtterance.onerror = () => {
+        setSpeechSupported(false)
+      }
+
+      try {
+        window.speechSynthesis.speak(testUtterance)
+      } catch {
+        setSpeechSupported(false)
+      }
+    }
+
     const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition
     setRecoSupported(!!SpeechRecognition)
   }, [])
@@ -351,7 +414,7 @@ export default function StoryRetellApp() {
 
       {!speechSupported && (
         <p className="text-sm text-destructive">
-          Your browser does not support speech synthesis. Audio playback may not work.
+          Your browser does not support speech synthesis properly. Audio playback may not work reliably. Try using Chrome or Edge for best results.
         </p>
       )}
       {!recoSupported && (
