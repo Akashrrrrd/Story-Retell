@@ -626,9 +626,15 @@ export default function StoryRetellApp() {
           
           // Use predefined keywords from stories.json if available, otherwise fallback to computed keywords
           const storyKeywords = currentStory?.keyWords || []
+          console.log('Story ID:', currentStory?.id)
+          console.log('Predefined keywords:', storyKeywords)
+          console.log('User transcript:', tr)
+          
           const score = storyKeywords.length > 0 
             ? computeMatchScoreWithKeywords(story, tr, storyKeywords)
             : computeMatchScore(story, tr)
+            
+          console.log('Score result:', score)
             
           const sessionResult = {
             percentage: score.percentage,

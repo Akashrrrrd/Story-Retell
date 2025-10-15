@@ -169,10 +169,14 @@ export function computeMatchScore(story: string, transcript: string) {
 
 // Enhanced scoring function that uses predefined keywords from stories.json
 export function computeMatchScoreWithKeywords(story: string, transcript: string, predefinedKeywords: string[]) {
-  // Normalize predefined keywords
-  const normalizedKeywords = predefinedKeywords.map(k => k.toLowerCase().trim()).filter(Boolean)
+  // Normalize predefined keywords (stem them to match the normalize function)
+  const normalizedKeywords = predefinedKeywords.map(k => stem(k.toLowerCase().trim())).filter(Boolean)
   const storyKeywords = new Set(normalizedKeywords)
   const userTokens = new Set(normalize(transcript))
+  
+  console.log('Original keywords:', predefinedKeywords)
+  console.log('Normalized keywords:', normalizedKeywords)
+  console.log('User tokens:', [...userTokens])
 
   // Find exact matches and partial matches
   const matched: string[] = []
