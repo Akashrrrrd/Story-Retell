@@ -31,35 +31,11 @@ function normalize(text: string): string[] {
 }
 
 function stem(token: string): string {
-  // Enhanced stemming: strip common suffixes and handle irregular forms
+  // Simple stemming: just normalize to lowercase and remove common suffixes
   let stemmed = token.toLowerCase()
   
-  // Handle common irregular plurals and past tense
-  const irregulars: { [key: string]: string } = {
-    "children": "child", "people": "person", "men": "man", "women": "woman",
-    "feet": "foot", "teeth": "tooth", "mice": "mouse", "geese": "goose",
-    "went": "go", "came": "come", "saw": "see", "got": "get",
-    "took": "take", "made": "make", "said": "say", "told": "tell", "gave": "give",
-    "found": "find", "bought": "buy", "brought": "bring", "thought": "think",
-    "rode": "ride", "": "ride", "riding": "ride", "rides": "ride",
-    "decided": "decide", "decides": "decide", "deciding": "decide",
-    "loved": "love", "loves": "love", "loving": "love",
-    "trained": "train", "trains": "train", "training": "train",
-    "competed": "compete", "competes": "compete", "competing": "compete",
-    "beaten": "beat", "beats": "beat", "beating": "beat",
-    "raced": "race", "races": "race", "racing": "race"
-  }
-  
-  if (irregulars[stemmed]) {
-    return irregulars[stemmed]
-  }
-  
-  // Regular stemming patterns - more comprehensive
-  stemmed = stemmed.replace(/(ies)$/i, "y") // cities -> city
-  stemmed = stemmed.replace(/(ied)$/i, "y") // tried -> try
-  stemmed = stemmed.replace(/(ing)$/i, "") // riding -> rid
-  stemmed = stemmed.replace(/(ed)$/i, "") // trained -> train
-  stemmed = stemmed.replace(/(ly|ness|ment|s)$/i, "")
+  // Remove common suffixes
+  stemmed = stemmed.replace(/(ing|ed|ly|ness|ment|s)$/i, "")
   
   return stemmed
 }
@@ -189,77 +165,33 @@ export function computeMatchScoreWithKeywords(story: string, transcript: string,
   const matched: string[] = []
   const partialMatches: string[] = []
   
-  // Enhanced matching logic with better fuzzy matching
+  // Simple and effective matching using final transcription
   for (let i = 0; i < originalKeywords.length; i++) {
     const originalKeyword = originalKeywords[i]
     const stemmedKeyword = stemmedKeywords[i]
     
-    let isMatched = false
-    let isPartialMatch = false
+    // Check for exact matches (case-insensitive)
+    const hasExactMatch = [...userTokens].some(token => 
+      token.toLowerCase() === originalKeyword.toLowerCase() || 
+      token === stemmedKeyword
+    )
     
-    // Check exact matches first
-    const hasExactMatch = userTokens.has(originalKeyword.toLowerCase()) || userTokens.has(stemmedKeyword)
     if (hasExactMatch) {
       matched.push(originalKeyword)
-      isMatched = true
-    }
-    
-    if (!isMatched) {
-      // Check for stemmed matches
-      const hasStemmedMatch = userTokens.has(stemmedKeyword)
-      if (hasStemmedMatch) {
-        matched.push(originalKeyword)
-        isMatched = true
-      }
-    }
-    
-    if (!isMatched) {
-      // Check for substring matches (more flexible)
-      const hasSubstringMatch = [...userTokens].some(token => {
-        const tokenLower = token.toLowerCase()
-        const keywordLower = originalKeyword.toLowerCase()
-        const stemmedLower = stemmedKeyword.toLowerCase()
-        
-        // Check if token contains keyword or vice versa
-        return tokenLower.includes(keywordLower) || 
-               keywordLower.includes(tokenLower) ||
-               tokenLower.includes(stemmedLower) ||
-               stemmedLower.includes(tokenLower)
-      })
-      
-      if (hasSubstringMatch) {
-        matched.push(originalKeyword)
-        isMatched = true
-      }
-    }
-    
-    if (!isMatched) {
-      // Check for partial matches (at least 3 characters overlap)
+    } else {
+      // Check for partial matches (substring or stemmed)
       const hasPartialMatch = [...userTokens].some(token => {
         const tokenLower = token.toLowerCase()
         const keywordLower = originalKeyword.toLowerCase()
         
-        // Find longest common substring
-        let maxLength = 0
-        for (let i = 0; i < tokenLower.length; i++) {
-          for (let j = 0; j < keywordLower.length; j++) {
-            let k = 0
-            while (i + k < tokenLower.length && 
-                   j + k < keywordLower.length && 
-                   tokenLower[i + k] === keywordLower[j + k]) {
-              k++
-            }
-            maxLength = Math.max(maxLength, k)
-          }
-        }
-        
-        // Consider it a partial match if at least 3 characters overlap
-        return maxLength >= 3
+        // Check if token contains keyword or vice versa (minimum 3 chars)
+        return (tokenLower.includes(keywordLower) && keywordLower.length >= 3) ||
+               (keywordLower.includes(tokenLower) && tokenLower.length >= 3) ||
+               token === stemmedKeyword
       })
       
       if (hasPartialMatch) {
         partialMatches.push(originalKeyword)
-        isPartialMatch = true
       }
     }
   }
