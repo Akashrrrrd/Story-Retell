@@ -1198,37 +1198,38 @@ export default function StoryRetellApp() {
 
             <Separator />
 
-            {/* Versant-Style Analysis */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            {/* Enhanced Analysis */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
               <div className="text-center p-4 bg-muted rounded-lg">
-                <div className="text-2xl font-bold text-primary">{result.matchedKeywords.length}</div>
-                <div className="text-sm text-muted-foreground">Keywords Matched</div>
-                <div className="text-xs text-muted-foreground">out of {result.totalKeywords}</div>
-                </div>
-              <div className="text-center p-4 bg-muted rounded-lg">
-                <div className="text-2xl font-bold text-primary">
-                  {(result as any).contentWords || 0}
+                <div className="text-2xl font-bold text-primary">{(result as any).exactMatches || result.matchedKeywords.length}</div>
+                <div className="text-sm text-muted-foreground">Exact Matches</div>
+                <div className="text-xs text-muted-foreground">perfect keywords</div>
               </div>
-                <div className="text-sm text-muted-foreground">Content Words</div>
-                <div className="text-xs text-muted-foreground">in story</div>
-                </div>
               <div className="text-center p-4 bg-muted rounded-lg">
-                <div className="text-2xl font-bold text-primary">
-                  {(result as any).contentMatches || 0}
-                </div>
-                <div className="text-sm text-muted-foreground">Content Matches</div>
-                <div className="text-xs text-muted-foreground">you captured</div>
+                <div className="text-2xl font-bold text-orange-600">{(result as any).partialMatchesCount || 0}</div>
+                <div className="text-sm text-muted-foreground">Partial Matches</div>
+                <div className="text-xs text-muted-foreground">close attempts</div>
+              </div>
+              <div className="text-center p-4 bg-muted rounded-lg">
+                <div className="text-2xl font-bold text-primary">{(result as any).totalAttempted || result.matchedKeywords.length}</div>
+                <div className="text-sm text-muted-foreground">Total Attempted</div>
+                <div className="text-xs text-muted-foreground">out of {result.totalKeywords}</div>
+              </div>
+              <div className="text-center p-4 bg-muted rounded-lg">
+                <div className="text-2xl font-bold text-green-600">{(result as any).accuracyRate || Math.round((result.matchedKeywords.length / result.totalKeywords) * 100)}%</div>
+                <div className="text-sm text-muted-foreground">Accuracy Rate</div>
+                <div className="text-xs text-muted-foreground">keyword coverage</div>
               </div>
             </div>
 
             {/* Keywords Analysis */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
                   <Badge variant="default" className="text-sm">
-                    {result.matchedKeywords.length} / {result.totalKeywords}
+                    {(result as any).exactMatches || result.matchedKeywords.length} / {result.totalKeywords}
                   </Badge>
-                  <span className="font-medium">Key Words Matched</span>
+                  <span className="font-medium">Exact Matches</span>
                 </div>
                 <div className="flex flex-wrap gap-1">
                   {result.matchedKeywords.length > 0 ? (
@@ -1238,22 +1239,42 @@ export default function StoryRetellApp() {
                       </Badge>
                     ))
                   ) : (
-                    <span className="text-muted-foreground text-sm">No keywords matched</span>
+                    <span className="text-muted-foreground text-sm">No exact matches</span>
                   )}
+                </div>
               </div>
-            </div>
 
               <div className="space-y-3">
-            <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="text-sm">
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-sm bg-orange-50 text-orange-700 border-orange-200">
+                    {(result as any).partialMatchesCount || 0}
+                  </Badge>
+                  <span className="font-medium">Partial Matches</span>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {(result as any).partialMatches && (result as any).partialMatches.length > 0 ? (
+                    (result as any).partialMatches.map((keyword: string, index: number) => (
+                      <Badge key={index} variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
+                        {keyword}
+                      </Badge>
+                    ))
+                  ) : (
+                    <span className="text-muted-foreground text-sm">No partial matches</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Badge variant="destructive" className="text-sm">
                     {result.missingKeywords.length}
                   </Badge>
-                  <span className="font-medium">Key Words Missed</span>
+                  <span className="font-medium">Missed Keywords</span>
                 </div>
                 <div className="flex flex-wrap gap-1">
                   {result.missingKeywords.length > 0 ? (
                     result.missingKeywords.map((keyword: string, index: number) => (
-                      <Badge key={index} variant="outline" className="text-xs">
+                      <Badge key={index} variant="destructive" className="text-xs">
                         {keyword}
                       </Badge>
                     ))
@@ -1261,6 +1282,42 @@ export default function StoryRetellApp() {
                     <span className="text-green-600 text-sm">All keywords captured!</span>
                   )}
                 </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Feedback Section */}
+            <div className="space-y-3">
+              <div className="font-medium flex items-center gap-2">
+                <Target className="h-4 w-4" />
+                Performance Feedback
+              </div>
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <div className="text-sm text-blue-800">
+                  {result.percentage >= 80 ? (
+                    <div>
+                      <strong>Excellent work!</strong> You captured most of the key information from the story. 
+                      Your retelling shows strong comprehension and recall abilities.
+                    </div>
+                  ) : result.percentage >= 60 ? (
+                    <div>
+                      <strong>Good job!</strong> You captured the main points of the story. 
+                      Focus on including more specific details and key words to improve your score.
+                    </div>
+                  ) : (
+                    <div>
+                      <strong>Keep practicing!</strong> Try to include more key words and specific details from the story. 
+                      Pay attention to important names, actions, and descriptive words.
+                    </div>
+                  )}
+                </div>
+                {(result as any).partialMatchesCount > 0 && (
+                  <div className="mt-2 text-sm text-orange-700">
+                    <strong>Tip:</strong> You were close on {(result as any).partialMatchesCount} keyword{(result as any).partialMatchesCount > 1 ? 's' : ''}. 
+                    Try to be more precise with your word choices.
+                  </div>
+                )}
               </div>
             </div>
 

@@ -32,7 +32,7 @@ function normalize(text: string): string[] {
 
 function stem(token: string): string {
   // Enhanced stemming: strip common suffixes and handle irregular forms
-  let stemmed = token
+  let stemmed = token.toLowerCase()
   
   // Handle common irregular plurals and past tense
   const irregulars: { [key: string]: string } = {
@@ -40,17 +40,26 @@ function stem(token: string): string {
     "feet": "foot", "teeth": "tooth", "mice": "mouse", "geese": "goose",
     "went": "go", "came": "come", "saw": "see", "got": "get",
     "took": "take", "made": "make", "said": "say", "told": "tell", "gave": "give",
-    "found": "find", "bought": "buy", "brought": "bring", "thought": "think"
+    "found": "find", "bought": "buy", "brought": "bring", "thought": "think",
+    "rode": "ride", "": "ride", "riding": "ride", "rides": "ride",
+    "decided": "decide", "decides": "decide", "deciding": "decide",
+    "loved": "love", "loves": "love", "loving": "love",
+    "trained": "train", "trains": "train", "training": "train",
+    "competed": "compete", "competes": "compete", "competing": "compete",
+    "beaten": "beat", "beats": "beat", "beating": "beat",
+    "raced": "race", "races": "race", "racing": "race"
   }
   
   if (irregulars[stemmed]) {
     return irregulars[stemmed]
   }
   
-  // Regular stemming patterns
+  // Regular stemming patterns - more comprehensive
   stemmed = stemmed.replace(/(ies)$/i, "y") // cities -> city
   stemmed = stemmed.replace(/(ied)$/i, "y") // tried -> try
-  stemmed = stemmed.replace(/(ing|ed|ly|ness|ment|s)$/i, "")
+  stemmed = stemmed.replace(/(ing)$/i, "") // riding -> rid
+  stemmed = stemmed.replace(/(ed)$/i, "") // trained -> train
+  stemmed = stemmed.replace(/(ly|ness|ment|s)$/i, "")
   
   return stemmed
 }
@@ -180,28 +189,77 @@ export function computeMatchScoreWithKeywords(story: string, transcript: string,
   const matched: string[] = []
   const partialMatches: string[] = []
   
-  // Check both original and stemmed versions
+  // Enhanced matching logic with better fuzzy matching
   for (let i = 0; i < originalKeywords.length; i++) {
     const originalKeyword = originalKeywords[i]
     const stemmedKeyword = stemmedKeywords[i]
     
-    // Check if user mentioned the original keyword (case-insensitive)
-    const hasOriginalMatch = [...userTokens].some(token => 
-      token.includes(originalKeyword) || originalKeyword.includes(token)
-    )
+    let isMatched = false
+    let isPartialMatch = false
     
-    // Check if user mentioned the stemmed version
-    const hasStemmedMatch = userTokens.has(stemmedKeyword)
+    // Check exact matches first
+    const hasExactMatch = userTokens.has(originalKeyword.toLowerCase()) || userTokens.has(stemmedKeyword)
+    if (hasExactMatch) {
+      matched.push(originalKeyword)
+      isMatched = true
+    }
     
-    if (hasOriginalMatch || hasStemmedMatch) {
-      matched.push(originalKeyword) // Use original for display
-    } else {
-      // Check for partial matches with original keyword
-      const hasPartialMatch = [...userTokens].some(token => 
-        token.includes(originalKeyword) || originalKeyword.includes(token)
-      )
+    if (!isMatched) {
+      // Check for stemmed matches
+      const hasStemmedMatch = userTokens.has(stemmedKeyword)
+      if (hasStemmedMatch) {
+        matched.push(originalKeyword)
+        isMatched = true
+      }
+    }
+    
+    if (!isMatched) {
+      // Check for substring matches (more flexible)
+      const hasSubstringMatch = [...userTokens].some(token => {
+        const tokenLower = token.toLowerCase()
+        const keywordLower = originalKeyword.toLowerCase()
+        const stemmedLower = stemmedKeyword.toLowerCase()
+        
+        // Check if token contains keyword or vice versa
+        return tokenLower.includes(keywordLower) || 
+               keywordLower.includes(tokenLower) ||
+               tokenLower.includes(stemmedLower) ||
+               stemmedLower.includes(tokenLower)
+      })
+      
+      if (hasSubstringMatch) {
+        matched.push(originalKeyword)
+        isMatched = true
+      }
+    }
+    
+    if (!isMatched) {
+      // Check for partial matches (at least 3 characters overlap)
+      const hasPartialMatch = [...userTokens].some(token => {
+        const tokenLower = token.toLowerCase()
+        const keywordLower = originalKeyword.toLowerCase()
+        
+        // Find longest common substring
+        let maxLength = 0
+        for (let i = 0; i < tokenLower.length; i++) {
+          for (let j = 0; j < keywordLower.length; j++) {
+            let k = 0
+            while (i + k < tokenLower.length && 
+                   j + k < keywordLower.length && 
+                   tokenLower[i + k] === keywordLower[j + k]) {
+              k++
+            }
+            maxLength = Math.max(maxLength, k)
+          }
+        }
+        
+        // Consider it a partial match if at least 3 characters overlap
+        return maxLength >= 3
+      })
+      
       if (hasPartialMatch) {
         partialMatches.push(originalKeyword)
+        isPartialMatch = true
       }
     }
   }
@@ -253,14 +311,23 @@ export function computeMatchScoreWithKeywords(story: string, transcript: string,
   }
   
   const percentage = Math.round(Math.min(100, Math.max(0, finalScore * 100)))
+  
+  // Calculate additional metrics for better feedback
+  const totalAttempted = matched.length + partialMatches.length
+  const accuracyRate = originalKeywords.length > 0 ? (totalAttempted / originalKeywords.length) : 0
 
   return {
     percentage,
     matchedKeywords: matched.sort(),
     missingKeywords: missing.sort(),
+    partialMatches: partialMatches.sort(),
     totalKeywords: originalKeywords.length,
     contentWords: storyContentSet.size,
     userContentWords: userContentSet.size,
-    contentMatches: contentMatches
+    contentMatches: contentMatches,
+    accuracyRate: Math.round(accuracyRate * 100),
+    totalAttempted: totalAttempted,
+    exactMatches: matched.length,
+    partialMatchesCount: partialMatches.length
   }
 }
