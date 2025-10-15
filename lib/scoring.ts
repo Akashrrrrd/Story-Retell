@@ -38,7 +38,7 @@ function stem(token: string): string {
   const irregulars: { [key: string]: string } = {
     "children": "child", "people": "person", "men": "man", "women": "woman",
     "feet": "foot", "teeth": "tooth", "mice": "mouse", "geese": "goose",
-    "went": "go", "went": "go", "came": "come", "saw": "see", "got": "get",
+    "went": "go", "came": "come", "saw": "see", "got": "get",
     "took": "take", "made": "make", "said": "say", "told": "tell", "gave": "give",
     "found": "find", "bought": "buy", "brought": "bring", "thought": "think"
   }
@@ -174,9 +174,7 @@ export function computeMatchScoreWithKeywords(story: string, transcript: string,
   const stemmedKeywords = originalKeywords.map(k => stem(k)).filter(Boolean)
   const userTokens = new Set(normalize(transcript))
   
-  console.log('Original keywords:', predefinedKeywords)
-  console.log('Stemmed keywords:', stemmedKeywords)
-  console.log('User tokens:', [...userTokens])
+  // Debug logging removed for production
 
   // Find exact matches and partial matches
   const matched: string[] = []
@@ -260,7 +258,7 @@ export function computeMatchScoreWithKeywords(story: string, transcript: string,
     percentage,
     matchedKeywords: matched.sort(),
     missingKeywords: missing.sort(),
-    totalKeywords: storyKeywords.size,
+    totalKeywords: originalKeywords.length,
     contentWords: storyContentSet.size,
     userContentWords: userContentSet.size,
     contentMatches: contentMatches

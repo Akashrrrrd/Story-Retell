@@ -630,7 +630,7 @@ export default function StoryRetellApp() {
     // Pick a random story from filtered set
     const idx = Math.floor(Math.random() * filteredStories.length)
     const selectedStory = filteredStories[idx]
-    const originalIndex = stories.findIndex(story => story === selectedStory)
+    const originalIndex = stories.findIndex(story => story.id === selectedStory.id)
     setCurrentStoryIndex(originalIndex)
 
     // Phase: listening
@@ -656,7 +656,7 @@ export default function StoryRetellApp() {
           // evaluate
           setPhase("evaluating")
           const tr = (transcriptRef.current || "").trim()
-          const currentStory = stories[currentStoryIndex]
+          const currentStory = currentStoryIndex !== null && currentStoryIndex >= 0 ? stories[currentStoryIndex] : null
           
           // Use predefined keywords from stories.json if available, otherwise fallback to computed keywords
           const storyKeywords = currentStory?.keyWords || []
@@ -706,7 +706,7 @@ export default function StoryRetellApp() {
           isSpeakingPhaseRef.current = false
           setPhase("evaluating")
           const tr = (transcriptRef.current || "").trim()
-          const currentStory = stories[currentStoryIndex]
+          const currentStory = currentStoryIndex !== null && currentStoryIndex >= 0 ? stories[currentStoryIndex] : null
           
           const storyKeywords = currentStory?.keyWords || []
           const score = storyKeywords.length > 0 
