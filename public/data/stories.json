@@ -69,6 +69,160 @@
       "difficulty": "medium",
       "wordCount": 65,
       "keyWords": ["Stephanie", "pet", "rabbit", "gotten", "store", "paid", "money", "weeks", "realized", "well", "vet", "stomach", "infection", "special", "medicine", "days", "better"]
+    },
+    {
+      "id": 11,
+      "text": "Scott is a scientist and works for a company that investigates and explores outer space. He researches how stars are made and how they travel through space. After having worked for the company for 40 years, it is now time for him to retire. He has decided to get a large telescope to use at home in his free time.",
+      "difficulty": "medium",
+      "wordCount": 58,
+      "keyWords": ["Scott", "scientist", "company", "investigates", "explores", "outer", "space", "researches", "stars", "travel", "worked", "years", "retire", "telescope", "home", "free", "time"]
+    },
+    {
+      "id": 12,
+      "text": "When Daniel woke up, he found a note from his mother. Since it was Saturday, his mother wanted him to work around the house. First, she wanted him to clean his room and then water the plants. She also wanted him to return all his library books. Daniel thought he would rather be at school.",
+      "difficulty": "easy",
+      "wordCount": 50,
+      "keyWords": ["Daniel", "woke", "note", "mother", "Saturday", "work", "house", "clean", "room", "water", "plants", "return", "library", "books", "school"]
+    },
+    {
+      "id": 13,
+      "text": "Six friends traveled to another country together. One day on their trip, they decided to split into two groups. One group went to a museum, and the other group went to a famous garden. The two groups agreed to meet at 06:00 that evening. At 06:00, one group got to the meeting place, but the other group did not come until two hours later. When they finally got there, they explained that they had missed their bus.",
+      "difficulty": "medium",
+      "wordCount": 70,
+      "keyWords": ["friends", "traveled", "country", "trip", "decided", "split", "groups", "museum", "famous", "garden", "agreed", "meet", "evening", "meeting", "place", "explained", "missed", "bus"]
+    },
+    {
+      "id": 14,
+      "text": "A man stood outside his house and gathered leaves. He put them into a large pile in front of his house. Suddenly, a young boy came and jumped into the pile of leaves. The leaves flew everywhere. The man felt somewhat angry, but the young boy smiled at him and helped him gather the leaves again. The man was happy in the end.",
+      "difficulty": "easy",
+      "wordCount": 55,
+      "keyWords": ["man", "stood", "outside", "house", "gathered", "leaves", "pile", "front", "suddenly", "young", "boy", "jumped", "flew", "everywhere", "angry", "smiled", "helped", "happy", "end"]
+    },
+    {
+      "id": 15,
+      "text": "Every summer since they were young, the two brothers have gone camping with their father in the mountains. They always go to the same place, and each year, they take a picture of themselves under the same tree next to a lake. They have more than forty years of photos of the three of them there.",
+      "difficulty": "medium",
+      "wordCount": 55,
+      "keyWords": ["summer", "young", "brothers", "camping", "father", "mountains", "place", "year", "picture", "tree", "lake", "forty", "years", "photos"]
+    },
+    {
+      "id": 16,
+      "text": "A young woman named Samantha was walking down the street when she saw her friend waving to her from the opposite sidewalk. Samantha smiled at her friend and began to walk toward her. Suddenly Samantha saw a large bus on the street coming right at her. She ran back quickly and waited for it to pass before continuing to the other side. When she finally reached the other sidewalk, a friend told her to be more careful.",
+      "difficulty": "medium",
+      "wordCount": 70,
+      "keyWords": ["young", "woman", "Samantha", "walking", "street", "friend", "waving", "opposite", "sidewalk", "smiled", "began", "suddenly", "large", "bus", "coming", "ran", "quickly", "waited", "pass", "continuing", "reached", "careful"]
+    },
+    {
+      "id": 17,
+      "text": "Anita wanted to go somewhere interesting on vacation, away from the usual tourist hotspots. She heard about a small beautiful island that could only be accessed by boat. Anita thought it sounded interesting and bought her tickets. The boat arrived at the island after dark, so she went straight to her hotel and slept. In the morning, she explored the island and found it was even more beautiful than she had expected. Anita was happy she had made the trip.",
+      "difficulty": "medium",
+      "wordCount": 75,
+      "keyWords": ["Anita", "interesting", "vacation", "tourist", "hotspots", "beautiful", "island", "accessed", "boat", "sounded", "bought", "tickets", "arrived", "dark", "hotel", "slept", "morning", "explored", "expected", "happy", "trip"]
+    },
+    {
+      "id": 18,
+      "text": "Carolina had a pet cat. Over the past few days, she'd noticed that the cat had far less energy than usual and was concerned about its health. She took the cat to the vet and asked them to find out what was wrong. Later that day, she received a call from the vet saying that they had found the problem. It turned out her cat had swallowed a piece of plastic, which was making it feel sick. The vet removed the plastic, and Carolina was relieved to see her cat's energy levels return to normal.",
+      "difficulty": "medium",
+      "wordCount": 80,
+      "keyWords": ["Carolina", "pet", "cat", "days", "noticed", "energy", "usual", "concerned", "health", "vet", "asked", "wrong", "received", "call", "problem", "swallowed", "plastic", "sick", "removed", "relieved", "levels", "normal"]
+    },
+    {
+      "id": 19,
+      "text": "Matthew had just started working for a new company. He worked online, so mostly communicated with his colleagues through email. One day, he found out that his company was offering an in person training workshop for new employees, which he decided to attend. The workshop was very interesting, and Matthew was able to discuss ideas with colleagues that he had never met before. In his opinion, that was even more valuable than the knowledge he gained from the training.",
+      "difficulty": "medium",
+      "wordCount": 75,
+      "keyWords": ["Matthew", "started", "working", "company", "online", "communicated", "colleagues", "email", "offering", "training", "workshop", "employees", "decided", "attend", "interesting", "discuss", "ideas", "met", "opinion", "valuable", "knowledge", "gained"]
+    },
+    {
+      "id": 20,
+      "text": "Stephen is an author. He wanted to write a new book, but he couldn't come up with any ideas. He talked to his wife about it, and she suggested trying a new hobby, because it might inspire him. Stephen followed her advice and tried something new. The new experiences gave him some great ideas, and he was able to write a new book, which will be published early next year.",
+      "difficulty": "medium",
+      "wordCount": 65,
+      "keyWords": ["Stephen", "author", "write", "book", "ideas", "talked", "wife", "suggested", "hobby", "inspire", "followed", "advice", "tried", "experiences", "great", "published", "year"]
+    },
+    {
+      "id": 21,
+      "text": "Valentina borrowed two books from the library. She read the first one but didn't have time to read the second one. When she returned the books, she asked the librarian if she could keep the second one for a bit longer. However, she wasn't able to, because the book had been reserved by somebody else. On her way home, Valentina decided to buy a second-hand copy of the book online; it should be delivered next week.",
+      "difficulty": "medium",
+      "wordCount": 70,
+      "keyWords": ["Valentina", "borrowed", "books", "library", "read", "time", "returned", "asked", "librarian", "longer", "reserved", "somebody", "home", "decided", "second-hand", "copy", "online", "delivered", "week"]
+    },
+    {
+      "id": 22,
+      "text": "On her way home, Michelle saw six ducklings swimming in a river. The ducklings were at the bottom of a small waterfall, and their mother was at the top. The ducklings were desperately trying to swim back to their mother, but couldn't get back up the waterfall. In the end, the mother duck jumped down to meet the ducklings, and they all swam off together.",
+      "difficulty": "medium",
+      "wordCount": 60,
+      "keyWords": ["Michelle", "ducklings", "swimming", "river", "bottom", "waterfall", "mother", "top", "desperately", "trying", "swim", "jumped", "meet", "swam"]
+    },
+    {
+      "id": 23,
+      "text": "Annie goes camping every summer with her mother and father. They especially enjoy putting a tent up at a lake near their house, because they can also go swimming there. However, this summer they won't be able to camp at the lake because the road to the lake is closed. So they are going to go to visit Annie's uncle instead.",
+      "difficulty": "easy",
+      "wordCount": 55,
+      "keyWords": ["Annie", "camping", "summer", "mother", "father", "enjoy", "tent", "lake", "house", "swimming", "road", "closed", "visit", "uncle"]
+    },
+    {
+      "id": 24,
+      "text": "Joan is highly stressed at work, she asked her boss Nathan if she could take a vacation for two weeks, he refused the next day Joan handed Nathan her resignation letter and booked a one-way ticket to Malibu.",
+      "difficulty": "medium",
+      "wordCount": 40,
+      "keyWords": ["Joan", "stressed", "work", "boss", "Nathan", "vacation", "weeks", "refused", "handed", "resignation", "letter", "booked", "ticket", "Malibu"]
+    },
+    {
+      "id": 25,
+      "text": "Olivia was watching a horror movie, when she heard a loud bang from her kitchen, convinced that it was a burglar she screamed for help, Jerry her neighbor heard her scream and rushed to the house to see what was wrong, when he arrived Olivia was about to dial 911 but Jerry immediately stopped her for the figure that emerged from the kitchen was not a burglar but Jerry's missing cat Tom.",
+      "difficulty": "medium",
+      "wordCount": 65,
+      "keyWords": ["Olivia", "watching", "horror", "movie", "heard", "bang", "kitchen", "convinced", "burglar", "screamed", "help", "Jerry", "neighbor", "rushed", "house", "arrived", "dial", "stopped", "figure", "emerged", "missing", "cat", "Tom"]
+    },
+    {
+      "id": 26,
+      "text": "Eric was walking in the park when he found an eagle sprawling on the ground it was trying to fly but couldn't its wings appeared to be broken. Eric looked for the park's caretaker and informed him about the injured eagle to his relief the park's caretaker was also a veterinarian.",
+      "difficulty": "medium",
+      "wordCount": 50,
+      "keyWords": ["Eric", "walking", "park", "found", "eagle", "sprawling", "ground", "trying", "fly", "wings", "broken", "looked", "caretaker", "informed", "injured", "relief", "veterinarian"]
+    },
+    {
+      "id": 27,
+      "text": "Tim really enjoys playing football. He was on the teams at high school and also at university. He got used to being praised for being the best player. He had even won some regional and national awards. Then, a year before he graduated from university, he injured his left leg, and the doctor told Tim not to play football anymore. He was really disappointed at first, but then he decided to become a football coach.",
+      "difficulty": "medium",
+      "wordCount": 75,
+      "keyWords": ["Tim", "enjoys", "playing", "football", "teams", "high", "school", "university", "praised", "player", "won", "regional", "national", "awards", "graduated", "injured", "leg", "doctor", "disappointed", "decided", "coach"]
+    },
+    {
+      "id": 28,
+      "text": "A family, consisting of a mother, a father, and their two daughters, lived in a small apartment in the center of the city. They liked the convenience of being close to the shops and restaurants, but they were getting tired of the noise and dirt from the city center. They also sometimes felt that the apartment was too small for them. So, they decided to move into a large house in the countryside, and they like it much better.",
+      "difficulty": "medium",
+      "wordCount": 70,
+      "keyWords": ["family", "mother", "father", "daughters", "small", "apartment", "center", "city", "convenience", "close", "shops", "restaurants", "tired", "noise", "dirt", "felt", "decided", "move", "large", "house", "countryside", "better"]
+    },
+    {
+      "id": 29,
+      "text": "Paul loved to go swimming whenever he could. He loved to swim in the local swimming pool, as well as in the lake near his home. But his mother thought that swimming in the lake was dangerous because the lake was very deep. Paul's mother told him about her concerns, but he said that she shouldn't worry. Then one day when he was swimming in the lake, a huge fish came up and nipped him on the leg. Paul got scared and decided not to swim in the lake anymore.",
+      "difficulty": "medium",
+      "wordCount": 80,
+      "keyWords": ["Paul", "loved", "swimming", "local", "pool", "lake", "home", "mother", "thought", "dangerous", "deep", "told", "concerns", "worry", "huge", "fish", "nipped", "leg", "scared", "decided", "anymore"]
+    },
+    {
+      "id": 30,
+      "text": "Emma left her house in a hurry and forgot her umbrella. A few minutes later, it started to rain heavily. She tried to cover her head with her bag, but it didn't help much. By the time she reached the office, she was soaking wet. Her co-workers laughed, and someone gave her a towel and a hot drink.",
+      "difficulty": "easy",
+      "wordCount": 50,
+      "keyWords": ["Emma", "left", "house", "hurry", "forgot", "umbrella", "minutes", "started", "rain", "heavily", "tried", "cover", "head", "bag", "reached", "office", "soaking", "wet", "co-workers", "laughed", "towel", "hot", "drink"]
+    },
+    {
+      "id": 31,
+      "text": "After studying for weeks, Luis finally took his driving test. He was nervous at first, but he remembered all the rules. The examiner said he did a great job and passed on his first try. Louis smiled proudly and called his parents to share the news. That evening, his family celebrated with a special dinner.",
+      "difficulty": "easy",
+      "wordCount": 50,
+      "keyWords": ["studying", "weeks", "Luis", "finally", "driving", "test", "nervous", "remembered", "rules", "examiner", "great", "job", "passed", "smiled", "proudly", "called", "parents", "share", "news", "evening", "family", "celebrated", "special", "dinner"]
+    },
+    {
+      "id": 32,
+      "text": "Anna was walking home when the lights suddenly went out in her neighborhood. At first, she felt a little scared because everything was so dark and quiet. She used her phone flashlight to find her way. As she walked, she saw neighbors coming outside to check what had happened. They all ended up talking and laughing together while waiting for the power to come back.",
+      "difficulty": "medium",
+      "wordCount": 60,
+      "keyWords": ["Anna", "walking", "home", "lights", "suddenly", "neighborhood", "scared", "dark", "quiet", "phone", "flashlight", "find", "way", "neighbors", "outside", "check", "happened", "ended", "talking", "laughing", "waiting", "power"]
     }
   ]
 }
