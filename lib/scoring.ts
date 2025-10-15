@@ -160,7 +160,7 @@ export function computeMatchScore(story: string, transcript: string) {
     percentage,
     matchedKeywords: matched.sort(),
     missingKeywords: missing.sort(),
-    totalKeywords: originalKeywords.length,
+    totalKeywords: storyKeywords.size,
     contentWords: storyContentSet.size,
     userContentWords: userContentSet.size,
     contentMatches: contentMatches
@@ -260,7 +260,7 @@ export function computeMatchScoreWithKeywords(story: string, transcript: string,
     percentage,
     matchedKeywords: matched.sort(),
     missingKeywords: missing.sort(),
-    totalKeywords: originalKeywords.length,
+    totalKeywords: storyKeywords.size,
     contentWords: storyContentSet.size,
     userContentWords: userContentSet.size,
     contentMatches: contentMatches
