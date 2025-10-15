@@ -458,7 +458,10 @@ export default function StoryRetellApp() {
 
   // Enhanced Speech recognition using correct Web Speech API
   const startRecognition = useCallback(() => {
-    transcriptRef.current = ""
+    // Only clear transcript on first start, not on restarts
+    if (!recognitionRef.current) {
+      transcriptRef.current = ""
+    }
     
     // Use correct Web Speech API according to W3C specification
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
@@ -523,6 +526,15 @@ export default function StoryRetellApp() {
           break
         case 'not-allowed':
           console.error('Speech recognition not allowed - check permissions')
+          break
+        case 'service-not-allowed':
+          console.error('Speech service not allowed - check browser settings')
+          break
+        case 'language-not-supported':
+          console.error('Language not supported by speech recognition')
+          break
+        case 'phrases-not-supported':
+          console.error('Phrases not supported by speech recognition')
           break
         case 'network':
           console.error('Network error during speech recognition')
