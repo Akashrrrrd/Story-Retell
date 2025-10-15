@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Volume2, VolumeX, Mic, MicOff, Play, Pause, RotateCcw, Trophy, Target, Clock } from "lucide-react"
-import { computeMatchScore } from "@/lib/scoring"
+import { computeMatchScore, computeMatchScoreWithKeywords } from "@/lib/scoring"
 
 // Web Speech API Type Definitions according to W3C specification
 interface SpeechSynthesisEvent extends Event {
@@ -131,24 +131,27 @@ export default function StoryRetellApp() {
     return "hard"
   }, [])
 
-  // Estimate story duration for TTS (rough approximation)
+  // Enhanced story duration estimation for TTS
   const estimateStoryDuration = useCallback((text: string): number => {
-    const sentences = splitIntoSentences(text)
-    const chunks = splitIntoReadableChunks(text, 180)
-    const wordsPerSentence = 15 // average words per sentence
+    const wordCount = text.split(/\s+/).length
+    const sentenceCount = splitIntoSentences(text).length
+    
+    // More accurate estimation based on actual word count and speech rate
     const wordsPerMinute = 150 // average speaking rate
-    const speechRate = 0.8 // slower rate for better comprehension
-    const secondsPerWord = (60 / wordsPerMinute) / speechRate
-
-    // Estimate based on chunks (more accurate for our chunked approach)
-    // Each chunk represents a complete thought unit
-    const estimatedSeconds = Math.max(
-      chunks.length * 6, // minimum 6 seconds per chunk for comfortable listening
-      text.length * secondsPerWord * 1.3 // 30% buffer for pauses and natural speech
-    )
-
-    return Math.max(estimatedSeconds * 1000, STORY_LISTEN_MS) // at least 30 seconds
-  }, [])
+    const speechRate = voiceSettings.rate // Use user's preferred rate
+    const pauseTime = sentenceCount * 0.5 // 0.5 seconds pause per sentence
+    
+    // Calculate base duration
+    const baseDurationSeconds = (wordCount / wordsPerMinute) * 60 / speechRate
+    
+    // Add pause time and buffer
+    const totalDurationSeconds = baseDurationSeconds + pauseTime + 2 // 2 second buffer
+    
+    // Ensure minimum duration for comprehension
+    const minDurationSeconds = Math.max(15, wordCount * 0.3) // At least 0.3 seconds per word
+    
+    return Math.max(totalDurationSeconds * 1000, minDurationSeconds * 1000)
+  }, [voiceSettings.rate])
 
   // Fetch and parse stories from JSON data file
   useEffect(() => {
@@ -182,26 +185,56 @@ export default function StoryRetellApp() {
     }
   }, [])
 
-  // Helpers: Beep via WebAudio (short alert tone)
-  const beep = useCallback((durationMs = 400, frequency = 880) => {
+  // Enhanced beep function with better audio handling
+  const beep = useCallback((durationMs = 400, frequency = 880, type: 'start' | 'end' = 'start') => {
     try {
       const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
+      
+      // Create oscillator
       const osc = ctx.createOscillator()
       const gain = ctx.createGain()
+      
+      // Configure oscillator
       osc.type = "sine"
       osc.frequency.value = frequency
+      
+      // Connect nodes
       osc.connect(gain)
       gain.connect(ctx.destination)
-      gain.gain.setValueAtTime(0.001, ctx.currentTime)
-      gain.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + 0.02)
-      osc.start()
+      
+      // Set up volume envelope for smooth sound
+      const now = ctx.currentTime
+      gain.gain.setValueAtTime(0, now)
+      gain.gain.linearRampToValueAtTime(0.3, now + 0.01)
+      gain.gain.exponentialRampToValueAtTime(0.01, now + durationMs / 1000)
+      
+      // Start and stop oscillator
+      osc.start(now)
+      osc.stop(now + durationMs / 1000)
+      
+      // Clean up context after sound completes
       setTimeout(() => {
-        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.05)
-        osc.stop()
-        ctx.close()
-      }, durationMs)
-    } catch {
-      // ignore
+        try {
+          ctx.close()
+        } catch {
+          // ignore cleanup errors
+        }
+      }, durationMs + 100)
+      
+    } catch (error) {
+      console.warn('Beep failed:', error)
+      // Fallback: try to play a system beep if available
+      try {
+        if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+          const utterance = new SpeechSynthesisUtterance(type === 'start' ? 'beep' : 'end')
+          utterance.volume = 0.1
+          utterance.rate = 10
+          utterance.pitch = 2
+          window.speechSynthesis.speak(utterance)
+        }
+      } catch {
+        // ignore fallback errors
+      }
     }
   }, [])
 
@@ -250,14 +283,14 @@ export default function StoryRetellApp() {
     }
   }, [])
 
-  // TTS implementation using correct Web Speech API specification
+  // Enhanced TTS implementation using correct Web Speech API specification
   const speakStory = useCallback(
     async (text: string) => {
-      return new Promise<void>((resolve) => {
+      return new Promise<void>((resolve, reject) => {
         const synthesis = window.speechSynthesis
         if (!synthesis) {
           console.error("Speech synthesis not supported")
-          resolve()
+          reject(new Error("Speech synthesis not supported"))
           return
         }
 
@@ -273,69 +306,126 @@ export default function StoryRetellApp() {
         utterance.volume = voiceSettings.volume
         utterance.pitch = 1.0
 
-        // Try to select an English voice if available
+        // Enhanced voice selection
         const voices = synthesis.getVoices()
         if (voices.length > 0) {
-          const englishVoice = voices.find(voice => 
-            voice.lang.startsWith('en') && voice.localService
-          ) || voices.find(voice => voice.lang.startsWith('en')) || voices[0]
+          // Try to find the user's selected voice first
+          let selectedVoice = null
+          if (voiceSettings.selectedVoice) {
+            selectedVoice = voices.find(voice => voice.name === voiceSettings.selectedVoice)
+          }
           
-          if (englishVoice) {
-            utterance.voice = englishVoice
-            console.log('Using voice:', englishVoice.name, englishVoice.lang)
+          // Fallback to best English voice
+          if (!selectedVoice) {
+            selectedVoice = voices.find(voice => 
+              voice.lang.startsWith('en') && voice.localService
+            ) || voices.find(voice => voice.lang.startsWith('en')) || voices[0]
+          }
+          
+          if (selectedVoice) {
+            utterance.voice = selectedVoice
+            console.log('Using voice:', selectedVoice.name, selectedVoice.lang, selectedVoice.localService ? 'local' : 'remote')
           }
         }
+
+        let isCompleted = false
 
         // Event handlers according to Web Speech API specification
         utterance.onstart = (event: SpeechSynthesisEvent) => {
-          console.log('TTS started speaking:', event.name)
+          console.log('TTS started speaking:', event.name, 'at', event.charIndex)
         }
 
         utterance.onend = (event: SpeechSynthesisEvent) => {
-          console.log('TTS finished speaking:', event.name)
-          resolve()
-        }
-
-        utterance.onerror = (event: SpeechSynthesisErrorEvent) => {
-          console.error('TTS Error:', event.error, event.name)
-          resolve()
-        }
-
-        utterance.onpause = (event: SpeechSynthesisEvent) => {
-          console.log('TTS paused:', event.name)
-        }
-
-        utterance.onresume = (event: SpeechSynthesisEvent) => {
-          console.log('TTS resumed:', event.name)
-        }
-
-        utterance.onmark = (event: SpeechSynthesisEvent) => {
-          console.log('TTS mark reached:', event.name, event.charIndex)
-        }
-
-        utterance.onboundary = (event: SpeechSynthesisEvent) => {
-          console.log('TTS boundary reached:', event.name, event.charIndex)
-        }
-
-        // Start speaking using Web Speech API
-        console.log('Starting TTS speech...')
-        synthesis.speak(utterance)
-
-        // Set up cancellation
-        ttsCancelRef.current = () => {
-          try {
-            synthesis.cancel()
-            resolve()
-          } catch {
+          if (!isCompleted) {
+            isCompleted = true
+            console.log('TTS finished speaking:', event.name, 'elapsed:', event.elapsedTime)
             resolve()
           }
         }
+
+        utterance.onerror = (event: SpeechSynthesisErrorEvent) => {
+          if (!isCompleted) {
+            isCompleted = true
+            console.error('TTS Error:', event.error, event.name)
+            
+            // Handle specific error types
+            switch (event.error) {
+              case 'not-allowed':
+                reject(new Error('Speech synthesis not allowed - check permissions'))
+                break
+              case 'audio-busy':
+                reject(new Error('Audio device busy - try again'))
+                break
+              case 'audio-hardware':
+                reject(new Error('Audio hardware not available'))
+                break
+              case 'network':
+                reject(new Error('Network error during speech synthesis'))
+                break
+              case 'synthesis-unavailable':
+                reject(new Error('Speech synthesis engine not available'))
+                break
+              case 'synthesis-failed':
+                reject(new Error('Speech synthesis failed'))
+                break
+              case 'language-unavailable':
+                reject(new Error('Language not available for synthesis'))
+                break
+              case 'voice-unavailable':
+                reject(new Error('Selected voice not available'))
+                break
+              case 'text-too-long':
+                reject(new Error('Text too long for synthesis'))
+                break
+              case 'invalid-argument':
+                reject(new Error('Invalid argument for speech synthesis'))
+                break
+              default:
+                reject(new Error(`Speech synthesis error: ${event.error}`))
+            }
+          }
+        }
+
+        utterance.onpause = (event: SpeechSynthesisEvent) => {
+          console.log('TTS paused:', event.name, 'at', event.charIndex)
+        }
+
+        utterance.onresume = (event: SpeechSynthesisEvent) => {
+          console.log('TTS resumed:', event.name, 'at', event.charIndex)
+        }
+
+        utterance.onmark = (event: SpeechSynthesisEvent) => {
+          console.log('TTS mark reached:', event.name, 'at', event.charIndex)
+        }
+
+        utterance.onboundary = (event: SpeechSynthesisEvent) => {
+          console.log('TTS boundary reached:', event.name, 'at', event.charIndex, 'length:', event.charLength)
+        }
+
+        // Set up cancellation
+        ttsCancelRef.current = () => {
+          if (!isCompleted) {
+            isCompleted = true
+            try {
+              synthesis.cancel()
+              console.log('TTS cancelled by user')
+              resolve()
+            } catch (error) {
+              console.error('Error cancelling TTS:', error)
+              resolve()
+            }
+          }
+        }
+
+        // Start speaking using Web Speech API
+        console.log('Starting TTS speech...', 'Rate:', utterance.rate, 'Volume:', utterance.volume)
+        synthesis.speak(utterance)
       })
     },
     [voiceSettings],
   )
 
-  // Simplified timers with progress and countdown (no pause functionality)
+  // Enhanced timers with accurate progress calculation
   const startTimedPhase = useCallback((ms: number, onDone: () => void) => {
     if (timerRef.current) {
       window.clearInterval(timerRef.current)
@@ -358,10 +448,11 @@ export default function StoryRetellApp() {
           window.clearInterval(timerRef.current)
           timerRef.current = null
         }
+        setProgress(100)
         setTimeRemaining(0)
         onDone()
       }
-    }, 100)
+    }, 50) // More frequent updates for smoother progress
   }, [])
 
   // Enhanced Speech recognition using correct Web Speech API
@@ -386,11 +477,14 @@ export default function StoryRetellApp() {
     // Enhanced result processing for better accuracy
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       let finalChunk = ""
+      let interimChunk = ""
       
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i]
         if (result.isFinal) {
           finalChunk += result[0].transcript + " "
+        } else {
+          interimChunk += result[0].transcript + " "
         }
       }
       
@@ -398,11 +492,36 @@ export default function StoryRetellApp() {
         transcriptRef.current += finalChunk
         console.log('Final transcript:', finalChunk)
       }
+      
+      // Log interim results for debugging
+      if (interimChunk) {
+        console.log('Interim transcript:', interimChunk)
+      }
     }
     
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       console.warn('Speech recognition error:', event.error, event.message)
-      // Continue with whatever transcript we have
+      
+      // Handle specific error types according to W3C spec
+      switch (event.error) {
+        case 'no-speech':
+          console.log('No speech detected, continuing...')
+          break
+        case 'audio-capture':
+          console.error('Audio capture failed - check microphone permissions')
+          break
+        case 'not-allowed':
+          console.error('Speech recognition not allowed - check permissions')
+          break
+        case 'network':
+          console.error('Network error during speech recognition')
+          break
+        case 'aborted':
+          console.log('Speech recognition aborted')
+          break
+        default:
+          console.warn('Unknown speech recognition error:', event.error)
+      }
     }
     
     recognition.onend = () => {
@@ -419,6 +538,22 @@ export default function StoryRetellApp() {
     
     recognition.onspeechstart = () => {
       console.log('Speech detected')
+    }
+    
+    recognition.onspeechend = () => {
+      console.log('Speech ended')
+    }
+    
+    recognition.onsoundend = () => {
+      console.log('Sound ended')
+    }
+    
+    recognition.onaudioend = () => {
+      console.log('Audio capture ended')
+    }
+    
+    recognition.onaudiostart = () => {
+      console.log('Audio capture started')
     }
     
     try {
@@ -478,17 +613,24 @@ export default function StoryRetellApp() {
       // proceed to prep
       setPhase("prep")
       startTimedPhase(PREP_MS, () => {
-        beep(500, 880) // speak beep
+        beep(500, 880, 'start') // speak beep - higher pitch for start
         // speaking
         setPhase("speaking")
         startRecognition()
         startTimedPhase(SPEAK_MS, () => {
-          beep(500, 660) // end beep
+          beep(500, 660, 'end') // end beep - lower pitch for end
           stopRecognition()
           // evaluate
           setPhase("evaluating")
           const tr = (transcriptRef.current || "").trim()
-          const score = computeMatchScore(story, tr)
+          const currentStory = stories[currentStoryIndex]
+          
+          // Use predefined keywords from stories.json if available, otherwise fallback to computed keywords
+          const storyKeywords = currentStory?.keyWords || []
+          const score = storyKeywords.length > 0 
+            ? computeMatchScoreWithKeywords(story, tr, storyKeywords)
+            : computeMatchScore(story, tr)
+            
           const sessionResult = {
             percentage: score.percentage,
             matchedKeywords: score.matchedKeywords,
