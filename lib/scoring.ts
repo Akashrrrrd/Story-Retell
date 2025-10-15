@@ -160,7 +160,7 @@ export function computeMatchScore(story: string, transcript: string) {
     percentage,
     matchedKeywords: matched.sort(),
     missingKeywords: missing.sort(),
-    totalKeywords: storyKeywords.size,
+    totalKeywords: originalKeywords.length,
     contentWords: storyContentSet.size,
     userContentWords: userContentSet.size,
     contentMatches: contentMatches
@@ -169,36 +169,52 @@ export function computeMatchScore(story: string, transcript: string) {
 
 // Enhanced scoring function that uses predefined keywords from stories.json
 export function computeMatchScoreWithKeywords(story: string, transcript: string, predefinedKeywords: string[]) {
-  // Normalize predefined keywords
-  const normalizedKeywords = predefinedKeywords.map(k => k.toLowerCase().trim()).filter(Boolean)
-  const storyKeywords = new Set(normalizedKeywords)
+  // Keep original keywords for display, but also create stemmed versions for matching
+  const originalKeywords = predefinedKeywords.map(k => k.toLowerCase().trim()).filter(Boolean)
+  const stemmedKeywords = originalKeywords.map(k => stem(k)).filter(Boolean)
   const userTokens = new Set(normalize(transcript))
+  
+  console.log('Original keywords:', predefinedKeywords)
+  console.log('Stemmed keywords:', stemmedKeywords)
+  console.log('User tokens:', [...userTokens])
 
   // Find exact matches and partial matches
   const matched: string[] = []
   const partialMatches: string[] = []
   
-  for (const keyword of storyKeywords) {
-    if (userTokens.has(keyword)) {
-      matched.push(keyword)
+  // Check both original and stemmed versions
+  for (let i = 0; i < originalKeywords.length; i++) {
+    const originalKeyword = originalKeywords[i]
+    const stemmedKeyword = stemmedKeywords[i]
+    
+    // Check if user mentioned the original keyword (case-insensitive)
+    const hasOriginalMatch = [...userTokens].some(token => 
+      token.includes(originalKeyword) || originalKeyword.includes(token)
+    )
+    
+    // Check if user mentioned the stemmed version
+    const hasStemmedMatch = userTokens.has(stemmedKeyword)
+    
+    if (hasOriginalMatch || hasStemmedMatch) {
+      matched.push(originalKeyword) // Use original for display
     } else {
-      // Check for partial matches (substring matches)
+      // Check for partial matches with original keyword
       const hasPartialMatch = [...userTokens].some(token => 
-        token.includes(keyword) || keyword.includes(token)
+        token.includes(originalKeyword) || originalKeyword.includes(token)
       )
       if (hasPartialMatch) {
-        partialMatches.push(keyword)
+        partialMatches.push(originalKeyword)
       }
     }
   }
 
-  const missing = [...storyKeywords].filter((k) => 
-    !userTokens.has(k) && !partialMatches.includes(k)
+  const missing = originalKeywords.filter((k) => 
+    !matched.includes(k) && !partialMatches.includes(k)
   )
 
   // Calculate scores
-  const exactMatchScore = storyKeywords.size ? (matched.length / storyKeywords.size) : 0
-  const partialMatchScore = storyKeywords.size ? (partialMatches.length / storyKeywords.size) * 0.5 : 0
+  const exactMatchScore = originalKeywords.length ? (matched.length / originalKeywords.length) : 0
+  const partialMatchScore = originalKeywords.length ? (partialMatches.length / originalKeywords.length) * 0.5 : 0
   
   // Calculate meaningful word density in user response
   const storyTokens = normalize(story)
@@ -244,7 +260,7 @@ export function computeMatchScoreWithKeywords(story: string, transcript: string,
     percentage,
     matchedKeywords: matched.sort(),
     missingKeywords: missing.sort(),
-    totalKeywords: storyKeywords.size,
+    totalKeywords: originalKeywords.length,
     contentWords: storyContentSet.size,
     userContentWords: userContentSet.size,
     contentMatches: contentMatches

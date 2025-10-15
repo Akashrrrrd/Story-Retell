@@ -112,6 +112,7 @@ export default function StoryRetellApp() {
   const transcriptRef = useRef<string>("")
   const timerRef = useRef<number | null>(null)
   const startTsRef = useRef<number>(0)
+  const isSpeakingPhaseRef = useRef<boolean>(false)
 
   // Categorize story difficulty based on text characteristics
   const categorizeStoryDifficulty = useCallback((text: string): StoryDifficulty => {
@@ -457,7 +458,10 @@ export default function StoryRetellApp() {
 
   // Enhanced Speech recognition using correct Web Speech API
   const startRecognition = useCallback(() => {
-    transcriptRef.current = ""
+    // Only clear transcript on first start, not on restarts
+    if (!recognitionRef.current) {
+      transcriptRef.current = ""
+    }
     
     // Use correct Web Speech API according to W3C specification
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
@@ -505,13 +509,32 @@ export default function StoryRetellApp() {
       // Handle specific error types according to W3C spec
       switch (event.error) {
         case 'no-speech':
-          console.log('No speech detected, continuing...')
+          console.log('No speech detected, restarting recognition to continue listening...')
+          // Restart recognition after a brief pause to continue listening
+          if (isSpeakingPhaseRef.current) {
+            setTimeout(() => {
+              try {
+                recognition.start()
+              } catch (error) {
+                console.log('Recognition restart after no-speech failed:', error)
+              }
+            }, 100)
+          }
           break
         case 'audio-capture':
           console.error('Audio capture failed - check microphone permissions')
           break
         case 'not-allowed':
           console.error('Speech recognition not allowed - check permissions')
+          break
+        case 'service-not-allowed':
+          console.error('Speech service not allowed - check browser settings')
+          break
+        case 'language-not-supported':
+          console.error('Language not supported by speech recognition')
+          break
+        case 'phrases-not-supported':
+          console.error('Phrases not supported by speech recognition')
           break
         case 'network':
           console.error('Network error during speech recognition')
@@ -525,7 +548,16 @@ export default function StoryRetellApp() {
     }
     
     recognition.onend = () => {
-      console.log('Speech recognition ended')
+      console.log('Speech recognition ended - restarting to ensure continuous listening')
+      // Restart recognition if it ends before our timer is done and we're still in speaking phase
+      // This ensures continuous listening throughout the 40-second period
+      if (isSpeakingPhaseRef.current) {
+        try {
+          recognition.start()
+        } catch (error) {
+          console.log('Recognition restart failed (likely already running):', error)
+        }
+      }
     }
     
     recognition.onstart = () => {
@@ -615,10 +647,12 @@ export default function StoryRetellApp() {
         beep(500, 880, 'start') // speak beep - higher pitch for start
         // speaking
         setPhase("speaking")
+        isSpeakingPhaseRef.current = true
         startRecognition()
         startTimedPhase(SPEAK_MS, () => {
           beep(500, 660, 'end') // end beep - lower pitch for end
           stopRecognition()
+          isSpeakingPhaseRef.current = false
           // evaluate
           setPhase("evaluating")
           const tr = (transcriptRef.current || "").trim()
@@ -626,9 +660,15 @@ export default function StoryRetellApp() {
           
           // Use predefined keywords from stories.json if available, otherwise fallback to computed keywords
           const storyKeywords = currentStory?.keyWords || []
+          console.log('Story ID:', currentStory?.id)
+          console.log('Predefined keywords:', storyKeywords)
+          console.log('User transcript:', tr)
+          
           const score = storyKeywords.length > 0 
             ? computeMatchScoreWithKeywords(story, tr, storyKeywords)
             : computeMatchScore(story, tr)
+            
+          console.log('Score result:', score)
             
           const sessionResult = {
             percentage: score.percentage,
@@ -658,10 +698,12 @@ export default function StoryRetellApp() {
       startTimedPhase(PREP_MS, () => {
         beep(500, 880, 'start')
         setPhase("speaking")
+        isSpeakingPhaseRef.current = true
         startRecognition()
         startTimedPhase(SPEAK_MS, () => {
           beep(500, 660, 'end')
           stopRecognition()
+          isSpeakingPhaseRef.current = false
           setPhase("evaluating")
           const tr = (transcriptRef.current || "").trim()
           const currentStory = stories[currentStoryIndex]
