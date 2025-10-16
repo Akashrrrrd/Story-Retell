@@ -153,7 +153,7 @@ No environment variables required for basic functionality.
       "text": "Story content...",
       "difficulty": "easy|medium|hard",
       "wordCount": 54,
-      "keyWords": ["keyword1", "keyword2", ...]
+      "keyWords": ["keyword1", "keyword2", "..."]
     }
   ]
 }

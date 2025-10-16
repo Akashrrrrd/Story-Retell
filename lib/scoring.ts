@@ -31,25 +31,10 @@ function normalize(text: string): string[] {
 }
 
 function stem(token: string): string {
-  // Enhanced stemming: strip common suffixes and handle irregular forms
-  let stemmed = token
+  // Simple stemming: just normalize to lowercase and remove common suffixes
+  let stemmed = token.toLowerCase()
   
-  // Handle common irregular plurals and past tense
-  const irregulars: { [key: string]: string } = {
-    "children": "child", "people": "person", "men": "man", "women": "woman",
-    "feet": "foot", "teeth": "tooth", "mice": "mouse", "geese": "goose",
-    "went": "go", "went": "go", "came": "come", "saw": "see", "got": "get",
-    "took": "take", "made": "make", "said": "say", "told": "tell", "gave": "give",
-    "found": "find", "bought": "buy", "brought": "bring", "thought": "think"
-  }
-  
-  if (irregulars[stemmed]) {
-    return irregulars[stemmed]
-  }
-  
-  // Regular stemming patterns
-  stemmed = stemmed.replace(/(ies)$/i, "y") // cities -> city
-  stemmed = stemmed.replace(/(ied)$/i, "y") // tried -> try
+  // Remove common suffixes
   stemmed = stemmed.replace(/(ing|ed|ly|ness|ment|s)$/i, "")
   
   return stemmed
@@ -174,34 +159,37 @@ export function computeMatchScoreWithKeywords(story: string, transcript: string,
   const stemmedKeywords = originalKeywords.map(k => stem(k)).filter(Boolean)
   const userTokens = new Set(normalize(transcript))
   
-  console.log('Original keywords:', predefinedKeywords)
-  console.log('Stemmed keywords:', stemmedKeywords)
-  console.log('User tokens:', [...userTokens])
+  // Debug logging removed for production
 
   // Find exact matches and partial matches
   const matched: string[] = []
   const partialMatches: string[] = []
   
-  // Check both original and stemmed versions
+  // Simple and effective matching using final transcription
   for (let i = 0; i < originalKeywords.length; i++) {
     const originalKeyword = originalKeywords[i]
     const stemmedKeyword = stemmedKeywords[i]
     
-    // Check if user mentioned the original keyword (case-insensitive)
-    const hasOriginalMatch = [...userTokens].some(token => 
-      token.includes(originalKeyword) || originalKeyword.includes(token)
+    // Check for exact matches (case-insensitive)
+    const hasExactMatch = [...userTokens].some(token => 
+      token.toLowerCase() === originalKeyword.toLowerCase() || 
+      token === stemmedKeyword
     )
     
-    // Check if user mentioned the stemmed version
-    const hasStemmedMatch = userTokens.has(stemmedKeyword)
-    
-    if (hasOriginalMatch || hasStemmedMatch) {
-      matched.push(originalKeyword) // Use original for display
+    if (hasExactMatch) {
+      matched.push(originalKeyword)
     } else {
-      // Check for partial matches with original keyword
-      const hasPartialMatch = [...userTokens].some(token => 
-        token.includes(originalKeyword) || originalKeyword.includes(token)
-      )
+      // Check for partial matches (substring or stemmed)
+      const hasPartialMatch = [...userTokens].some(token => {
+        const tokenLower = token.toLowerCase()
+        const keywordLower = originalKeyword.toLowerCase()
+        
+        // Check if token contains keyword or vice versa (minimum 3 chars)
+        return (tokenLower.includes(keywordLower) && keywordLower.length >= 3) ||
+               (keywordLower.includes(tokenLower) && tokenLower.length >= 3) ||
+               token === stemmedKeyword
+      })
+      
       if (hasPartialMatch) {
         partialMatches.push(originalKeyword)
       }
@@ -255,14 +243,23 @@ export function computeMatchScoreWithKeywords(story: string, transcript: string,
   }
   
   const percentage = Math.round(Math.min(100, Math.max(0, finalScore * 100)))
+  
+  // Calculate additional metrics for better feedback
+  const totalAttempted = matched.length + partialMatches.length
+  const accuracyRate = originalKeywords.length > 0 ? (totalAttempted / originalKeywords.length) : 0
 
   return {
     percentage,
     matchedKeywords: matched.sort(),
     missingKeywords: missing.sort(),
-    totalKeywords: storyKeywords.size,
+    partialMatches: partialMatches.sort(),
+    totalKeywords: originalKeywords.length,
     contentWords: storyContentSet.size,
     userContentWords: userContentSet.size,
-    contentMatches: contentMatches
+    contentMatches: contentMatches,
+    accuracyRate: Math.round(accuracyRate * 100),
+    totalAttempted: totalAttempted,
+    exactMatches: matched.length,
+    partialMatchesCount: partialMatches.length
   }
 }
